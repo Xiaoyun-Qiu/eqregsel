@@ -1,49 +1,38 @@
-*! Test myfun_combined.do Xiaoyun Qiu 26july2015
+*! Test myfun_hcombined.do Xiaoyun Qiu 22May2016
 
-version 13
+//version 13
 
-cd "e:/Stata/duke/do"
+//change the directory to the one containing the STATA codes and cooked.dta
+cd "F:\onedrive\Stata\duke\new code"
 
-import excel using "e:/Stata/duke/data/test1.xlsx", firstrow clear
+mata: phi = (1,0,0,0,0)
+mata:st_matrix("r(phi)",phi)
 
-qui summarize afqt,d
-local p5 = r(p5)
-local p95 = r(p95)
-local arange = `p95' - `p5'
-local space = 200
+use cooked,clear
 
-clear 
+//choose one of the versions 
 
-set obs 2400
-egen tempc4 = fill(1(1)`space' 1(1)`space')
-gen c4 =  `arange' * tempc4/(`space' + 1) + `p5'
-drop tempc4
-sort c4
-egen c2 = fill(0 1 0 1) 
-sort c4 c2
-egen c3 = fill(26 27 28 26 27 28)
-sort c4 c3 c2
-egen c1 = fill(0 1 0 1)
-order c4,last
-order c1,first
-gen c5 = c4 * c4
-	
-mata:st_view(gridd=.,.,"c1 c2 c3 c4 c5") 
-mata:grid = gridd 
-mata: gridid = ((grid[.,1] + grid[.,2]) :< 2)
-mata: grid = select(grid,gridid)
-mata:st_matrix("r(grid)",grid)
-	
-import excel using "e:/Stata/duke/data/test1.xlsx", firstrow clear
+/******************************************************************************\
+the first version of STATA codes
+\******************************************************************************/
 
-//do myfun_combined.do
+do myfun_combined_v2.do
 
-gen afqt_2 = afqt^2
+combined log_wage black hispanic age AFQT0 AFQT0_2 , phi("r(phi)") boots(600)
 
-qui do myfun_combined.do
+/******************************************************************************\
+the second version of STATA codes
+\******************************************************************************/
 
-//syntax
-//myfun_combined log_wage black hispanic age afqt afqt_2 ,d(3) df(3) cf(1) lb(6) rb(9) quant(0.5) gridd("r(grid)") 
+//do myfun_combined_v2.do
+//combined log_wage black hispanic age AFQT0 AFQT0_2 , phi("r(phi)") boots(600)
 
-myfun_combined log_wage black hispanic age afqt afqt_2 , d(3) df(3) cf(1) gridd("r(grid)") 
 
+/******************************************************************************\
+the third version of STATA codes
+\******************************************************************************/
+
+//do myfun_combined_part1_v3.do
+//estimator log_wage black hispanic age AFQT0 AFQT0_2 , phi("r(phi)") grid(3)
+//do myfun_combined_part2_v3.do
+//std_b log_wage black hispanic age AFQT0 AFQT0_2 , tau(0.3) phi("r(phi)") sigmahat("Sigmahat")

@@ -1,34 +1,18 @@
-/************************************************\
-* program myfun_combined Xiaoyun Qiu 5Aug2015    *
-* Modified in 23, May, 2016                      *
-* version 1.0                                    *
-\************************************************/
-//------------------------------------------------------------------------------
-//Stata program: creates a new command
-capture program drop combined
-program combined,eclass
-//	version 13
-	syntax varlist(min=2 numeric) [if] [in] , PHI(string) [Boots(real 600)]
-	marksample touse
-	tokenize `varlist'
-	
-	mata:myfun_combined("`varlist'","`touse'","`phi'",`boots')
-	
-	ereturn list
-	mat beta_hom = e(beta_hom)
-	mat list beta_hom
-end
-
+*! Pure Mata function myfun_combined.mata, Xiaoyun Qiu, 23May2016
+*! Based on the modified MATLAB code
+*! version 1.0
 
 //------------------------------------------------------------------------------
-//Mata part: main function
+//Mata version of myfun_hetero.m
+//------------------------------------------------------------------------------
 mata:
-// version 13
+version 13
 mata clear
 mata set matastrict on
 
-void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi, ///
-					real scalar boots)
+void myfun_combined_v1(real matrix X,real matrix Y,real matrix phi,real scalar boots, ///
+						real matrix beta_hom, real scalar std_b, ///
+						real scalar specificationtest, real scalar tau0)
 {
 
 /*******************************************************************************\
@@ -48,22 +32,14 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 * specificationtest: P-value for the J-test.                                    *
 * tau0: Optimal quantile index selected.                                        *
 \******************************************************************************/
-	
-	real matrix Z, X, Y, phi
-	//real scalar boots
-	st_view(Z=.,.,tokens(varlist),touse)
-	Y = Z[.,1]
-	X = Z[|1,2\.,.|]
-	phi = st_matrix(Phi)
-	//boots = strtoreal(st_local("Boots"))
-	
+
     real scalar N, dd, JJ,lower, upper, step, dbb, G, B, i, j, gg,ss
 	real matrix  l,l1, median_b1
 	N = rows(X)
 	X = (J(N,1,1) , X)                                                          //Note that users would not specify the constant term when they call the function, so we need to add a constant term here.
 	dd = cols(X)
-	G = 3
-	B = 3                                                                     //B is the number of replications in our subsampling and bootstrap method.
+	G = 5
+	B = 10                                                                     //B is the number of replications in our subsampling and bootstrap method.
 	l = (0.65,0.85,1.15,1.45)                                                   //l is corresponding to the moment we use.
 	JJ = cols(l)
 	
@@ -72,9 +48,11 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 	step = (upper - lower)/G                                                    
     
 	dbb = sum(phi)
+	
+	//
 	median_b1 = mm_median(rchi2(100000,1,JJ*dbb))                               //Compute the median of the chi-square random variable with (J*sum(phi)) degree of freedom.
     
-	real matrix chi_bootbb
+	real matrix Z, chi_bootbb
 	Z = (Y,X)                                                                   //Now there is a constant term in X, and thus in Z
 	chi_bootbb = J(B,G,0)
 	
@@ -86,18 +64,17 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 	timer_clear()
 	for(gg=1;gg<=G;gg++){
 		timer_on(1)
-		
+	
 		tau = lower + step * gg
 		thetahat = rq_fnm(X,-Y,tau)
 		thetadagger = J(dd,B,0)
-			
+		
 		//need to double check whether it is the right way to select random sample...
 		for(ss=1;ss<=B;ss++){                                                   //Bootstrap the first stage estimator, use it to compute omega_0.
 			tempidz = rdiscrete(N,1,J(N,1,1/N))
 			Zz = Z[tempidz,.]
 			thetadagger[.,ss] = rq_fnm(Zz[|1,2\.,.|],-Zz[|1,1\.,1|],tau)        //There is a constant term in Zz
 		}
-		printf("loop1 \n")
 		Sigma = (thetadagger-J(1,B,thetahat))*(thetadagger-J(1,B,thetahat))'/B  //Compute the optimal weighting matrix.
 		Kount = (gg-1)*B
 		beta=(0)
@@ -111,45 +88,42 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 			par_bootb[|1,Kount+ss\.,Kount+ss|] = beta
 			chi_bootbb[ss,gg] = dis_b
 		}
-		printf("loop2 \n")	
+		
 		timer_off(1)
-			
+		
 	}
-	printf("loop3 \n")
+	
 	//
 	real matrix disbb, disbbbias,disbbvar, temp, tempmean, w
 	real scalar gstarbb
 	disbb = J(G,1,0)
 	disbbbias = J(G,1,0)
 	disbbvar = J(G,1,0)
-	w = (0,0)
-	disbbbias[|1,1\.,1|] = abs(mm_median(chi_bootbb)*boots/N :- median_b1)'	    //Compute an proxy of bias.
+	gstarbb=0
+	w=(0)
 	for(gg=1;gg<=G;gg++){
+		disbbbias[gg,1]=abs(mm_median(chi_bootbb[|1,gg\.,gg|])*boots/N-median_b1)' //Compute an proxy of bias.
 		Kount = (gg-1)*B
 		temp = par_bootb[|1,Kount+1\.,gg*B|]
 		tempmean = J(1,B,mean(temp')')
 		disbbvar[gg,1] = mean(colsum((temp-tempmean):^2)')                      //Compute the variance.
 		disbb[gg,1] = disbbvar[gg,1]*boots/N + disbbbias[gg,1]/sqrt(tau*boots)  //Compute a proxy of MSE for the full sample with size N. 
 	}
-	printf("loop4 \n")
 	minindex(disbb,1,gstarbb,w)                                                 //Select tau.
-
+	
 	//bootstrap the confidence interval
-	real matrix par_bootstraphomb, Sigmahat, beta_hom
+	real matrix par_bootstraphomb, Sigmahat
 	real scalar chibb, tempv
 	par_bootstraphomb = J(dbb,B,0)
-	tau = lower + step * gstarbb                                                //Compute tau_{n,2}
-    
-	thetahat = rq_fnm(X,-Y,tau)
+	tau = lower+step*gstarbb                                                    //Compute tau_{n,2}
+    thetahat[.,1] = rq_fnm(X,-Y,tau)
 	thetadagger = J(dd,B,0)
 	chibb = 0
-	beta_hom = (0)
 	for(ss=1;ss<=B;ss++){                                                       //Bootstrap the first stage estimator, use it to compute omega_0.
 		tempidz = rdiscrete(N,1,J(N,1,1/N))
 		Zz = Z[tempidz,.]
 		thetadagger[.,ss] = rq_fnm(Zz[|1,2\.,.|],-Zz[|1,1\.,1|],tau)            //There is a constant term in Zz
 	}
-	printf("loop5 \n")
 	Sigmahat=(thetadagger-J(1,B,thetahat))*(thetadagger-J(1,B,thetahat))'/B     //Compute the optimal weighting matrix.
 	myfun_hom_new(tau,Zz[|1,2\.,.|],Zz[|1,1\.,1|],l,phi,Sigmahat,beta_hom,chibb)
 	
@@ -161,22 +135,13 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 		myfun_hom_new(tau,Zz[|1,2\.,.|],Zz[|1,1\.,1|],l,phi,Sigmahat,temp,tempv)
 		par_bootstraphomb[|1,ss\.,ss|] = temp
 	}
-	printf("loop6 \n")
+	
 	//
-	real scalar std_b, specificationtest, tau0
 	std_b = mm_colvar(par_bootstraphomb')'                                      //Compute the standard deviation.
 	specificationtest = 1 - chi2(JJ*dbb,chibb)                                  //Compute the p-value for the J-test. 
 	tau0 = tau                                                                  //Output tau_{n,2}
-         
-	
-	st_matrix("e(beta_hom)",beta_hom)
-	st_numscalar("e(std_b)",std_b)
-	st_numscalar("e(specificationtest)",specificationtest)
-	st_numscalar("e(tau0)",tau0)
 }
 
-//------------------------------------------------------------------------------
-//myfun_hom_new.m
 void myfun_hom_new(real scalar tau, real matrix X, real matrix Y, real matrix l, ///
                    real matrix phi, real matrix Sigma, real matrix beta, ///
 				   real scalar dis_b)

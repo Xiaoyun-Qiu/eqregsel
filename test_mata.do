@@ -35,15 +35,13 @@ Note3: If other problems show up, please email me. Thanks!
 
 version 13
 
-cd "e:/Stata/duke/do"
+cd "F:\onedrive\Stata\duke\new code"
 
-import excel using "e:/Stata/duke/data/test1.xlsx", firstrow clear
+use cooked,clear
 
-do testfullpar10_7.mata
+do myfun_combined_v1.mata
+do myfun_hom_new.mata
 
-gen afqt_2 = afqt^2
-
-gen y = - log_wage
 
 //myfun_hetero y black hispanic age afqt afqt_2, tau(0.2)
 
@@ -51,25 +49,26 @@ gen y = - log_wage
 //Copy and paste the following lines into the windows to test myfun_hetero.mata
 /*
 mata
-boots = 550
-st_view(Z=.,.,"log_wage black hispanic age afqt afqt_2")
-tempZ = jumble(Z)
-Zz = tempZ[|1,1\boots,.|]
-X = Zz[|1,2\.,.|]
-X = (J(boots,1,1), X)
-Y = Zz[|1,1\.,1|]
-b0=0
-d0=1
+boots = 600
+st_view(Z=.,.,"log_wage black hispanic age AFQT0 AFQT0_2")
+N = rows(Z)
+X = Z[|1,2\.,.|]
+Y = Z[|1,1\.,1|]
 l = (0.65, 0.85, 1.15, 1.45)
 tau = 0.2
-Var=(0)
-Out=(0)
-Dis=0
-Nb1=0
-mm=1.2
-myfun_hetero(tau, mm, b0, d0, X, Y, l, Out, Dis, Var, Nb1)
-testfullpar( Z			)
+specificationtest=0
+std_b=0
+beta_hom=(0)
+phi=(1,0,0,0,0)
+myfun_combined_v1(X,Y,phi,boots, beta_hom,std_b,specificationtest,tau0)
 
+
+
+X=(J(rows(X),1,1),X)
+Sigma =  J(6,6,1)
+beta=(0)
+dis_b=0
+myfun_hom_new(tau,X, Y, l, phi,Sigma, beta, dis_b)
 */
 
 //------------------------------------------------------------------------------

@@ -7,28 +7,51 @@
 //Stata program: creates a new command
 capture program drop combined
 program combined,eclass
-//	version 13
-	syntax varlist(min=2 numeric) [if] [in] , PHI(string) [Boots(real 600)]
+    version 13
+	syntax varlist(min=2 numeric) [if] [in] ,  PHI(string) [Boots(real 600)]
 	marksample touse
 	tokenize `varlist'
 	
 	mata:myfun_combined("`varlist'","`touse'","`phi'",`boots')
 	
 	ereturn list
-	mat beta_hom = e(beta_hom)
-	mat list beta_hom
+	
+	mat w = e(w)
+	mat list w
+	mat gstarbb = e(gstarbb)
+	mat list gstarbb
+	mat disbb = e(disbb)
+	mat list disbb
+	mat disbbvar = e(disbbvar)
+	mat list disbbvar
+	mat disbbbias = e(disbbbias)
+	mat list disbbbias
+	mat median_b1 = e(median_b1)
+	mat list median_b1
+	mat chi_bootbb = e(chi_bootbb)
+	mat list chi_bootbb
+	mat par_bootb = e(par_bootb)
+	mat list par_bootb
+	mat thetadagger = e(thetadagger)
+	mat list thetadagger
+	mat thetahat = e(thetahat)
+	mat list thetahat
+	scalar N = e(N)
+	display N
+	scalar boots = e(boots)
+	display boots
 end
 
 
 //------------------------------------------------------------------------------
 //Mata part: main function
 mata:
-// version 13
+version 13
 mata clear
 mata set matastrict on
 
-void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi, ///
-					real scalar boots)
+void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi , ///
+					 real scalar boots)
 {
 
 /*******************************************************************************\
@@ -56,26 +79,32 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 	X = Z[|1,2\.,.|]
 	phi = st_matrix(Phi)
 	//boots = strtoreal(st_local("Boots"))
+	printf("boots %9.2f \n", boots)
 	
     real scalar N, dd, JJ,lower, upper, step, dbb, G, B, i, j, gg,ss
 	real matrix  l,l1, median_b1
 	N = rows(X)
-	X = (J(N,1,1) , X)                                                          //Note that users would not specify the constant term when they call the function, so we need to add a constant term here.
+	printf("N %9.2f \n", N)
+	st_numscalar("e(N)",N)
+	st_numscalar("e(boots)",boots)
+	
+	X = (J(N,1,1) , X)                                                          
 	dd = cols(X)
 	G = 3
-	B = 3                                                                     //B is the number of replications in our subsampling and bootstrap method.
-	l = (0.65,0.85,1.15,1.45)                                                   //l is corresponding to the moment we use.
+	B = 3                                                                   
+	l = (0.65,0.85,1.15,1.45)                                                   
 	JJ = cols(l)
 	
-	lower = min((80/boots, 0.1))                                                //lower is the lower bound for tau_{n,0}'.
-	upper = 0.3                                                                 //upper is the upper bound for tau_{n,0}'.
+	lower = min((80/boots, 0.1))                                                
+	upper = 0.3                                                                 
 	step = (upper - lower)/G                                                    
     
 	dbb = sum(phi)
-	median_b1 = mm_median(rchi2(100000,1,JJ*dbb))                               //Compute the median of the chi-square random variable with (J*sum(phi)) degree of freedom.
-    
+	median_b1 = mm_median(rchi2(100000,1,JJ*dbb))                               
+	st_matrix("e(median_b1)",median_b1)
+	
 	real matrix chi_bootbb
-	Z = (Y,X)                                                                   //Now there is a constant term in X, and thus in Z
+	Z = (Y,X)                                                                  
 	chi_bootbb = J(B,G,0)
 	
 	//
@@ -91,31 +120,35 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 		thetahat = rq_fnm(X,-Y,tau)
 		thetadagger = J(dd,B,0)
 			
-		//need to double check whether it is the right way to select random sample...
-		for(ss=1;ss<=B;ss++){                                                   //Bootstrap the first stage estimator, use it to compute omega_0.
+		for(ss=1;ss<=B;ss++){                                                   
 			tempidz = rdiscrete(N,1,J(N,1,1/N))
 			Zz = Z[tempidz,.]
-			thetadagger[.,ss] = rq_fnm(Zz[|1,2\.,.|],-Zz[|1,1\.,1|],tau)        //There is a constant term in Zz
+			thetadagger[.,ss] = rq_fnm(Zz[|1,2\.,.|],-Zz[|1,1\.,1|],tau)        
 		}
 		printf("loop1 \n")
-		Sigma = (thetadagger-J(1,B,thetahat))*(thetadagger-J(1,B,thetahat))'/B  //Compute the optimal weighting matrix.
+		Sigma = (thetadagger-J(1,B,thetahat))*(thetadagger-J(1,B,thetahat))'/B  
 		Kount = (gg-1)*B
 		beta=(0)
-		dis_b = 0
-		for(ss=1;ss<=B;ss++){ 
-			idz = 1::N
+		dis_b = (0)
+		idz = 1::N
+		for(ss=1;ss<=B;ss++){
+			
 			tempidz = jumble(idz)
 			seltempidz = tempidz[|1,1\boots,1|]
 			Zz = Z[seltempidz,.]
 			myfun_hom_new(tau,Zz[|1,2\.,.|],Zz[|1,1\.,1|],l,phi,Sigma,beta,dis_b)
-			par_bootb[|1,Kount+ss\.,Kount+ss|] = beta
+			par_bootb[.,Kount+ss] = beta
 			chi_bootbb[ss,gg] = dis_b
+			printf("script %9.2f\n", Kount+ss)
+			printf("beta %9.2f\n", beta)
+			printf("dis_b %9.2f\n",dis_b)
+			printf("Zz %9.2f\n",Zz[1,1])
 		}
 		printf("loop2 \n")	
 		timer_off(1)
 			
 	}
-	printf("loop3 \n")
+	printf("loop3")
 	//
 	real matrix disbb, disbbbias,disbbvar, temp, tempmean, w
 	real scalar gstarbb
@@ -123,56 +156,27 @@ void myfun_combined(string scalar varlist,string scalar touse, string matrix Phi
 	disbbbias = J(G,1,0)
 	disbbvar = J(G,1,0)
 	w = (0,0)
-	disbbbias[|1,1\.,1|] = abs(mm_median(chi_bootbb)*boots/N :- median_b1)'	    //Compute an proxy of bias.
+	disbbbias[|1,1\.,1|] = abs(mm_median(chi_bootbb*boots/N) :- median_b1)'	
 	for(gg=1;gg<=G;gg++){
+       //disbbbias[gg,1]=abs(mm_median(chi_bootbb[|1,gg\.,gg|])*boots/N-median_b1)'  //Compute an proxy of bias.
 		Kount = (gg-1)*B
 		temp = par_bootb[|1,Kount+1\.,gg*B|]
 		tempmean = J(1,B,mean(temp')')
-		disbbvar[gg,1] = mean(colsum((temp-tempmean):^2)')                      //Compute the variance.
-		disbb[gg,1] = disbbvar[gg,1]*boots/N + disbbbias[gg,1]/sqrt(tau*boots)  //Compute a proxy of MSE for the full sample with size N. 
+		disbbvar[gg,1] = mean(colsum((temp-tempmean):^2)')                     
+		disbb[gg,1] = disbbvar[gg,1]*boots/N + disbbbias[gg,1]/sqrt(tau*boots)  
 	}
-	printf("loop4 \n")
-	minindex(disbb,1,gstarbb,w)                                                 //Select tau.
-
-	//bootstrap the confidence interval
-	real matrix par_bootstraphomb, Sigmahat, beta_hom
-	real scalar chibb, tempv
-	par_bootstraphomb = J(dbb,B,0)
-	tau = lower + step * gstarbb                                                //Compute tau_{n,2}
-    
-	thetahat = rq_fnm(X,-Y,tau)
-	thetadagger = J(dd,B,0)
-	chibb = 0
-	beta_hom = (0)
-	for(ss=1;ss<=B;ss++){                                                       //Bootstrap the first stage estimator, use it to compute omega_0.
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
-		Zz = Z[tempidz,.]
-		thetadagger[.,ss] = rq_fnm(Zz[|1,2\.,.|],-Zz[|1,1\.,1|],tau)            //There is a constant term in Zz
-	}
-	printf("loop5 \n")
-	Sigmahat=(thetadagger-J(1,B,thetahat))*(thetadagger-J(1,B,thetahat))'/B     //Compute the optimal weighting matrix.
-	myfun_hom_new(tau,Zz[|1,2\.,.|],Zz[|1,1\.,1|],l,phi,Sigmahat,beta_hom,chibb)
-	
-	for(ss=1;ss<=B;ss++){                                                       //Bootstrap the first stage estimator, use it to compute omega_0.
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
-		Zz = Z[tempidz,.]
-		temp=(0)
-		tempv=0
-		myfun_hom_new(tau,Zz[|1,2\.,.|],Zz[|1,1\.,1|],l,phi,Sigmahat,temp,tempv)
-		par_bootstraphomb[|1,ss\.,ss|] = temp
-	}
-	printf("loop6 \n")
-	//
-	real scalar std_b, specificationtest, tau0
-	std_b = mm_colvar(par_bootstraphomb')'                                      //Compute the standard deviation.
-	specificationtest = 1 - chi2(JJ*dbb,chibb)                                  //Compute the p-value for the J-test. 
-	tau0 = tau                                                                  //Output tau_{n,2}
-         
-	
-	st_matrix("e(beta_hom)",beta_hom)
-	st_numscalar("e(std_b)",std_b)
-	st_numscalar("e(specificationtest)",specificationtest)
-	st_numscalar("e(tau0)",tau0)
+	printf("loop4")
+	minindex(disbb,1,gstarbb,w)                                                 
+	printf("bomb")
+	st_matrix("e(w)",w)
+	st_matrix("e(gstarbb)",gstarbb)
+	st_matrix("e(disbb)",disbb)
+	st_matrix("e(disbbvar)",disbbvar)
+	st_matrix("e(disbbbias)",disbbbias)
+	st_matrix("e(chi_bootbb)",chi_bootbb)
+	st_matrix("e(par_bootb)",par_bootb)
+	st_matrix("e(thetadagger)",thetadagger)
+	st_matrix("e(thetahat)",thetahat)
 }
 
 //------------------------------------------------------------------------------
