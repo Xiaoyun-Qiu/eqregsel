@@ -1,0 +1,549 @@
+#LyX 2.2 created this file. For more info see http://www.lyx.org/
+\lyxformat 508
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Documentation of STATA code for “Extremal Quantile Regression for Selection
+ Models and the Black-White Wage Gap”
+\end_layout
+
+\begin_layout Date
+December 2016
+\end_layout
+
+\begin_layout Section*
+Title 
+\end_layout
+
+\begin_layout Standard
+eqregsel - Estimation method using extremal quantile regression under endogenous
+ selection
+\end_layout
+
+\begin_layout Section*
+Syntax
+\end_layout
+
+\begin_layout Standard
+eqregsel varlist, [ options ]
+\end_layout
+
+\begin_layout Standard
+\align center
+\begin_inset Tabular
+<lyxtabular version="3" rows="5" columns="2">
+<features tabularvalignment="middle" tabularwidth="90text%">
+<column alignment="center" valignment="middle">
+<column alignment="center" valignment="middle" width="70text%">
+<row>
+<cell alignment="center" valignment="middle" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Options
+\end_layout
+
+\end_inset
+</cell>
+<cell multicolumn="1" alignment="center" valignment="middle" topline="true" bottomline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="middle" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+hom(#)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="middle" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Estimate the coefficients of the first # independent variables; default
+ is hom(1)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="middle" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+subs(#)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="middle" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Subsampling size used for selecting optimal quantile index tau; default
+ is based on the size of the dataset
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="middle" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+grid(#) 
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="middle" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Discretize the interval of tau into # subintervals; default is grid(40)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="middle" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+rep(#)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="middle" bottomline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Perform # bootstrap replications; default is rep(150)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+Description
+\end_layout
+
+\begin_layout Standard
+eqregsel estimates and provides inference for the coefficient of variables
+ of interest under endogenous selection.
+ The estimation method mainly assumes that under endogenous selection, the
+ effect of the outcome on selection dominates those of covariates for sufficient
+ly large values of the outcome, which is proposed by d'Haultfoeuille, X.,
+ Maurel, A., & Zhang, Y.
+ (2016), based on the paper Extremal Quantile Regression for Selection Models
+ and the Black-White Wage Gap.
+ The variables of interest are assumed to have homogeneous effects on the
+ outcome across its distribution.
+ The number of variables of interest can be more than one.
+\end_layout
+
+\begin_layout Section*
+Options
+\end_layout
+
+\begin_layout Standard
+The four options of this command have default values.
+\end_layout
+
+\begin_layout Standard
+hom(#) specifies the number of variable of interests.
+ The variables of interest are assumed to have homogeneous effects on the
+ outcome across its distribution.
+ Apart from specifying the number of variables of interests, users have
+ to put the all the variables of interest right after the dependent variables,
+ followed by other independent variables.
+ The default value is 1.
+\end_layout
+
+\begin_layout Standard
+subs(#) specifies the sample size used for selecting the optimal quantile
+ index tau.
+ To select tau, an information criteria considering tradeoff between biasedness
+ and efficiency is computed using a selected subsample, whose size is specified
+ by subs().
+ If no value is specified, the sample size is calculated by the following
+ formula.
+ 
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $0.6n-0.2(n-500)^{+}-0.2(n-1000)^{+}-0.2[1-\frac{ln2000}{lnn}](n-2000)^{+}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Or, by the piecewise function
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula $\begin{cases}
+06n & n<500\\
+300+0.4(n-500) & 500\leq n<1000\\
+500+0.2(n-1000) & 1000\leq n<2000\\
+700+0.2\times\frac{ln2000}{lnn}\times(n-2000) & n\geq2000
+\end{cases}$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+grid(#) specifies the number of subintervals to divide region of search
+ when selecting optimal quantile index tau.
+ The upper bound of region of search is 0.3, while the lower bound is 
+\begin_inset Formula $min(0.1,0.8/b_{n})$
+\end_inset
+
+, where 
+\begin_inset Formula $b_{n}$
+\end_inset
+
+ is specified by subs().
+ The default value is 40.
+ 
+\end_layout
+
+\begin_layout Standard
+rep(#) specifies the number of bootstrap replications when selecting optimal
+ quantile index tau .
+ The default value is 150.
+ 
+\end_layout
+
+\begin_layout Section*
+Output
+\end_layout
+
+\begin_layout Standard
+\begin_inset Tabular
+<lyxtabular version="3" rows="7" columns="2">
+<features tabularvalignment="middle" tabularwidth="80text%">
+<column alignment="center" valignment="top" width="0pt">
+<column alignment="center" valignment="top" width="60text%">
+<row>
+<cell alignment="center" valignment="top" topline="true" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Name
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Description
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" topline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(tau0)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" topline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Optimal quantile index
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(specificationtest)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Value of specification test
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(subs)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Subsampling size in the bootstrapping process
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(homvar)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Number of variable(s) with homogeneous effect(s) on the outcome
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(beta_hom)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Estimated coefficient(s) of interest
+\end_layout
+
+\end_inset
+</cell>
+</row>
+<row>
+<cell alignment="center" valignment="top" bottomline="true" leftline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+e(std_b)
+\end_layout
+
+\end_inset
+</cell>
+<cell alignment="center" valignment="top" bottomline="true" rightline="true" usebox="none">
+\begin_inset Text
+
+\begin_layout Plain Layout
+Standard error of the estimator(s)
+\end_layout
+
+\end_inset
+</cell>
+</row>
+</lyxtabular>
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+Remarks
+\end_layout
+
+\begin_layout Enumerate
+Users should specify the number of variables of interest by using the option
+ hom().
+ Apart from specifying number of variables whose coefficients are to be
+ estimated, users should put names of those variables right after the dependent
+ variable, followed by other independent variables.
+ Users can specify more than one variables whose coefficients are to be
+ estimated.
+\end_layout
+
+\begin_layout Enumerate
+During computation, the command will display the estimated time and progress
+ bar.
+ After estimation, results will be displayed.
+\end_layout
+
+\begin_layout Section*
+Examples
+\end_layout
+
+\begin_layout Standard
+Here are some examples.
+\end_layout
+
+\begin_layout Standard
+.
+ eqregsel log_wage black hispanic age AFQT0 AFQT0_2
+\end_layout
+
+\begin_layout Standard
+(black is the variable of interest)
+\end_layout
+
+\begin_layout Standard
+.
+ eqregsel log_wage black hispanic age AFQT0 AFQT0_2, hom(2) 
+\end_layout
+
+\begin_layout Standard
+(black and hispanic are variables of interest)
+\end_layout
+
+\begin_layout Standard
+.
+ eqregsel log_wage black hispanic age AFQT0 AFQT0_2, rep(300) 
+\end_layout
+
+\begin_layout Section*
+Version Requirements
+\end_layout
+
+\begin_layout Standard
+This command requires Stata 12 or upper.
+\end_layout
+
+\begin_layout Section*
+Methods and Formulas
+\end_layout
+
+\begin_layout Standard
+See Xavier D'Haultfoeuille, Arnaud Maurel, Yichong Zhang (2016), Extremal
+ Quantile Regression for Selection Models and the Black-White Wage Gap,
+ Mimeo.
+\end_layout
+
+\begin_layout Section*
+Supporting Package
+\end_layout
+
+\begin_layout Standard
+This command requires -moremate- package.
+ Before calling this command, the user needs to install -moremata- by typing:
+\end_layout
+
+\begin_layout Standard
+.
+ ssc install moremata 
+\end_layout
+
+\end_body
+\end_document

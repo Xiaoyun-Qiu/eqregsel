@@ -10,6 +10,6 @@ use cooked_12,clear
 qui do myfun_combined_v3_12.do
 mat hom = (1,1,0,0,0)
 gen y = - log_wage
-eqreg  y black hispanic age AFQT0 AFQT0_2 , phi("hom") 
+eqregsel  y black hispanic age AFQT0 AFQT0_2 , phi("hom") 
 
 
