@@ -1,10 +1,10 @@
 * ado file for extremal quantile regression for selection models
 * Coded by Xiaoyun Qiu
-* 19june2016
+* 19Dec2016
 
 program eqreg,eclass 
 	version 12
-	syntax varlist(min=2 numeric) [if] [in]  [, Hom(integer 1) Grid(integer 20) BTP(integer 200) Boots(real 0) ]
+	syntax varlist(min=2 numeric) [if] [in]  [, Hom(integer 1) Grid(integer 40) BTP(integer 150) Boots(real 0) ]
 	marksample touse
 	quietly count if `touse'
 	if `r(N)' == 0 error 2000
@@ -21,8 +21,10 @@ program eqreg,eclass
 	
 	local G  `grid'
 	local B  `btp'
-	matrix l = (0.65, 0.85, 1.15, 1.45)
+	matrix l = (0.9,1.1)
+	matrix l1 = (1,0.2)
 	local J = colsof(l)
+	local J1 = colsof(l1)
 	 
 	local lower = min(80/`boots',0.1)
 	local upper = 0.3
@@ -38,7 +40,7 @@ program eqreg,eclass
 
 	mat par_bootb = J(`dbb',`B',0)
 	mat chi_bootbb = J(`B',1,0)
-	scalar disbb = 100
+	scalar disbb = 10000000000000000000     // what is the usual scale of disbb???
 	
 	* SPECIFY BOOTS
 	if `boots'== 0{
@@ -73,21 +75,21 @@ program eqreg,eclass
 		mat Sigma=(thetadagger-thetahat*J(1,`B',1))*(thetadagger-thetahat*J(1,`B',1))'/`B'
 		
 		* CALL MYFUN_HOM_NEW()
+		* Instead of selecting optimal tau first, we compute beta each time
 			
-		mat pf = J(`d',`J'+1,0)
-		qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
-		mat pf[1,1] = e(b)'
-		forvalues j = 1/`J'{
-			local tau1 = `tau'*l[1,`j']
+		mat pf = J(`d',`J1',0)
+		forvalues j = 1/`J1'{
+			local tau1 = `tau'*l1[1,`j']
 			qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
-			mat pf[1,`j'+1] = e(b)'		
+			mat pf[1,`j'] = e(b)'		
 		} 
 		
 		local sigma Sigma
+		local ll1 l1
 		local ll l
 		* The order of pf is adjusted in myfun_hom_new()
 	    local PF  pf
-		mata: myfun_hom_new( "`phi'","`sigma'", "`ll'","`PF'", `d')
+		mata: myfun_hom_new( "`phi'","`sigma'", "`ll1'","`PF'", `d')
 		mat beta = e(beta)
 		local dis_b = e(dis_b)
 		
@@ -99,13 +101,11 @@ program eqreg,eclass
 			
 			* CALL MYFUN_HOM_NEW()
 			
-			mat pf = J(`d',`J'+1,0)
-			qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
-			mat pf[1,1] = e(b)'
+			mat pf = J(`d',`J',0)
 			forvalues j = 1/`J'{
 				local tau1 = `tau'*l[1,`j']
 				qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
-				mat pf[1,`j'+1] = e(b)'		
+				mat pf[1,`j'] = e(b)'		
 			} 
 			
 			local PF  pf
@@ -211,24 +211,22 @@ program eqreg,eclass
 			
 		* CALL MYFUN_HOM_NEW()
 			
-		mat pf = J(`d',`J'+1,0)
-		qui qreg_simplified12 y `varlist',quantile(`tau0') cformat(%10.0g)
-		mat pf[1,1] = e(b)'
-		forvalues j = 1/`J'{
-			local tau1 = `tau0'*l[1,`j']
+		mat pf = J(`d',`J1',0)
+		forvalues j = 1/`J1'{
+			local tau1 = `tau0'*l1[1,`j']
 			qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
-			mat pf[1,`j'+1] = e(b)'		
+			mat pf[1,`j'] = e(b)'		
 		} 
 			
 		local PF  pf
-		mata: myfun_hom_new("`phi'","`sigmahat'", "`ll'","`PF'", `d')
+		mata: myfun_hom_new("`phi'","`sigmahat'", "`ll1'","`PF'", `d')
 		mat par_bootstraphomb[1,`bb'] = e(beta)
 			
 		restore
 	}
 	
 	local Par_bootstraphomb par_bootstraphomb
-	mata: stat("`Par_bootstraphomb'", `J', `dbb',`chibb')
+	mata: stat("`Par_bootstraphomb'", `J1', `dbb',`chibb')
 	mat std_b = e(std_b)
 	mat V = diag(std_b)*diag(std_b)
 	local specificationtest e(specificationtest)
@@ -396,10 +394,10 @@ void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
 	
 	//Compute matrix L, Gamma_2, Gamma_3 in the paper.
 	real matrix l1, L, Gamma2, Gamma3
-	l1 = (1,l)
-	L = J(JJ+1,JJ+1,0)
-	for(i = 1; i <= JJ+1; i++){
-		for(j = 1; j <= JJ+1; j++){
+	l1 = l
+	L = J(JJ,JJ,0)
+	for(i = 1; i <= JJ; i++){
+		for(j = 1; j <= JJ; j++){
 			L[i,j] = min((l1[i],l1[j]))/sqrt(l1[i] * l1[j])
 		}
 	}
@@ -409,13 +407,11 @@ void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
 
 	// The first step: extremal quantile regression
 	real matrix tempy2
-	tempy2 = J(dbb*(JJ+1),1,0)
-	// Be careful aboout the subscript of pf
-	tempy2[|1,1\dbb,1|] = phitemp * pf[|1,1\dd-1,1|]
+	tempy2 = J(dbb*JJ,1,0)
 		
 	for(j=1;j<=JJ;j++){
 		// Be careful aboout the subscript of pf
-		tempy2[dbb*j+1..dbb*(j+1)] = phitemp * pf[|1,j+1\dd-1,j+1|]
+		tempy2[dbb*(j-1)+1..dbb*j] = phitemp * pf[|1,j\dd-1,j|]
 	}
 	// The second step: minimum distance estimation 
 	real matrix omega_0, W2, mom2,  GpG, beta
@@ -425,14 +421,13 @@ void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
 
 	W2 = luinv(GpG * (L # omega_0) * GpG' )                                     //W2 is the optimal weighting matrix for homo beta
 
-	beta = - luinv(J(JJ+1,1,I(dbb))' * W2 * J(JJ+1,1,I(dbb))) * J(JJ+1,1,I(dbb))' * W2 * tempy2
+	beta = - luinv(J(JJ,1,I(dbb))' * W2 * J(JJ,1,I(dbb))) * J(JJ,1,I(dbb))' * W2 * tempy2
 	mom2 = J(JJ*dbb, 1, 0)
 	for(j = 1; j <= JJ; ++j){
 		// Be careful aboout the subscript of pf
 		mom2[dbb*(j-1)+1..dbb*j,1] = phitemp * pf[|1,j\dd-1,j|] + beta             //mom2 is the value of moments for homo beta
 	}
-	// Be careful aboout the subscript of pf
-	mom2 = mom2\(phitemp * pf[|1,JJ+1\dd-1,JJ+1|] + beta )
+	
 	dis_b =  mom2' * W2 * mom2                                                  //here we compute the distance of homo beta evaluated at extremal quantile estimator of delta
 	
 	st_matrix("e(beta)",beta)
@@ -450,7 +445,7 @@ void IC(string matrix Chi_bootbb, string matrix Par_bootb, real scalar J, ///
 	chi_bootbb = st_matrix(Chi_bootbb)
 	par_bootb = st_matrix(Par_bootb)
 	
-	median_b1 = mm_median(rchi2(100000,1,J*dbb))
+	median_b1 = mm_median(rchi2(100000,1,(J-1)*dbb))
 	disbbbias=abs(mm_median(chi_bootbb)*boots/N-median_b1)'
 	tempmean = J(1,B,mean(par_bootb')')
 	disbbvar = mean(colsum((par_bootb-tempmean):^2)')
@@ -465,7 +460,7 @@ void stat(string matrix Par_bootstraphomb, real scalar J, real scalar dbb, ///
 	par_bootstraphomb = st_matrix(Par_bootstraphomb)
 	std_b = mm_colvar(par_bootstraphomb')'                                      //Compute the standard deviation.
 	std_b = sqrt(std_b)
-	specificationtest = 1 - chi2(J*dbb,chibb)
+	specificationtest = 1 - chi2((J-1)*dbb,chibb)
 	st_matrix("e(std_b)",std_b)
 	st_numscalar("e(specificationtest)",specificationtest)
 }

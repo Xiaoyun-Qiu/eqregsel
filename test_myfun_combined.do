@@ -3,7 +3,7 @@
 //version 13
 
 //change the directory to the one containing the STATA codes and cooked.dta
-cd F:\onedrive\Stata\DMZ\version3_June2016
+cd D:\onedrive\Stata\DMZ\version3_June2016
 
 use cooked_12,clear
 	
