@@ -1,9 +1,8 @@
 /*******************************************************************************\
-* Based on myfun_combined_v2.do in the version 2 folder, myfun_combined_v1.do in 
-  this folder
-* Modified in 3 June, 2016                        
-* version 2.0                                    
-* Use STATA command qreg to do quantile regression   
+* Based on myfun_combined_v2.do in the version 3 folder
+* Modified in 5 June, 2016                        
+* version 4.0                                    
+* Use STATA command qreg to do all quantile regressions  
 \*******************************************************************************/
 
 capture program drop eqreg
@@ -15,9 +14,10 @@ program eqreg,eclass
 	tokenize `varlist'
 	
 	// Assume right now users pass -Y into the varlist!!!
-	///parameters
-	local G = 2
-	local B = 2
+	* PARAMETERS
+	
+	local G = 40
+	local B = 300
 	matrix l = (0.65, 0.85, 1.15, 1.45)
 	local J = colsof(l)
 	local d: word count `varlist'
@@ -41,67 +41,132 @@ program eqreg,eclass
 	local dbb = ss[1,1]
 	mat par_bootb = J(`dbb',`B',0)
 	mat chi_bootbb = J(`B',1,0)
-	local disbb = 100
+	scalar disbb = 100
 	
+	di in gr "Begin big loop"
+	di "$S_TIME"
+	
+	* SELECT OPTIMAL TAU
 	forvalues gg = 1/`G'{
 		
 		local tau = `lower' + `step' * `gg'
 		qui qreg `varlist',quantile(`tau') cformat(%10.0g)
-		mat thetahat = e(b)'
+		mat theta = e(b)'
 		mat thetatemp = J(`d',`B',0)
-		forvalues j = 1/`B'{
+		
+		* BOOSTRAP THE FIRST STAGE ESTIMATOR TO COMPUTE OMEGA_0
+		
+		forvalues bb = 1/`B'{
 			preserve
-			bsample 
+			qui bsample 
 			qui qreg `varlist',quantile(`tau') cformat(%10.0g)
-			mat thetatemp[1,`j'] = e(b)'
+			mat thetatemp[1,`bb'] = e(b)'
 			restore
 		}
 		
 		* Adjust the order of coefficients of independent variables
+		mat thetahat = (theta[`d',1]\theta[1..`d'-1,1])
 		mat thetadagger = (thetatemp[`d',1..`B']\thetatemp[1..`d'-1,1..`B'])
 		mat Sigma=(thetadagger-thetahat*J(1,`B',1))*(thetadagger-thetahat*J(1,`B',1))'/`B'
+			
+		
+		* CALL MYFUN_HOM_NEW()
+		
+		local quant `tau'
+		forvalues j = 1/`J'{
+			local tau1 = `tau'*l[1,`j']
+			local quant `quant' `tau1'
+		} 
+		qui sqreg `varlist',quantile(`quant') r(2) cformat(%10.0g)
+		mat pf = e(b)'	
+			
 		local sigma Sigma
-		mata: myfun_hom_new("`varlist'","`touse'", "`phi'","`sigma'", `tau')
+		local ll l
+		* The order of pf is adjusted in myfun_hom_new()
+	    local PF  pf
+		mata: myfun_hom_new( "`phi'","`sigma'", "`ll'","`PF'", `d')
 		mat beta = e(beta)
 		local dis_b = e(dis_b)
 		
-		forvalues j = 1/`B'{
-			display `j'
+		di in gr "Big loop " %10.0g `gg'
+		di in gr "Stage one finished " 
+		di "$S_TIME"
+		
+		* Use subsample to compute the point estimator and J-test statistic
+		forvalues bb = 1/`B'{
 			preserve
-			sample `boots',count
-			mata: myfun_hom_new("`varlist'","`touse'", "`phi'","`sigma'", `tau')
-			mat par_bootb[1,`j'] = e(beta)
-			mat chi_bootbb[`j',1] = e(dis_b)
+			qui sample `boots',count
+			
+			* CALL MYFUN_HOM_NEW()
+			
+			local quant `tau'
+			forvalues j = 1/`J'{
+				local tau1 = `tau'*l[1,`j']
+				local quant `quant' `tau1'
+			} 
+			qui sqreg `varlist',quantile(`quant') r(2) cformat(%10.0g)
+			mat pf = e(b)'	
+			
+			local PF  pf
+			mata: myfun_hom_new("`phi'","`sigma'", "`ll'","`PF'", `d')
+			mat par_bootb[1,`bb'] = e(beta)
+			mat chi_bootbb[`bb',1] = e(dis_b)
+			
 			restore
 		}
-		local Chi_bootbb chi_bootbb
-		local Par_bootb par_bootb
+		
+		di in gr "Stage two finished " 
+		di "$S_TIME"
+		
+		local Chi_bootbb  chi_bootbb
+		local Par_bootb  par_bootb
 		mata: IC("`Chi_bootbb'", "`Par_bootb'",`J',`dbb',`B',`boots',`N',`tau')
-		local disbbtemp e(disbbtemp)
-		if(`disbbtemp' < `disbb'){
-			local disbb `disbbtemp'
+		local disbbtemp = e(disbbtemp)
+		if(`disbbtemp' < disbb){
+			scalar disbb = `disbbtemp'
 			mat Sigmahat = Sigma
-			local gstarbb `gg'
-			local beta_hom  beta
-			local chibb `dis_b'
-			local tau0 `tau'
+			mat beta_hom = beta
+			local chibb = `dis_b'
+			local tau0 = `tau'
+			
 		}
- 	}	
+ 	}
+	di in gr "End big loop"
+	di "$S_TIME"
+	
+		
+	* BOOTSTRAP THE CONFIDENCE INTERVAL
 	
 	local sigmahat Sigmahat
 	mat par_bootstraphomb = J(`dbb',`B',0)
-	forvalues j = 1/`B'{
-			preserve
-			bsample 
-			mata: myfun_hom_new("`varlist'","`touse'", "`phi'","`sigmahat'", `tau0')
-			mat par_bootstraphomb[1,`j'] = e(beta)
-			restore
+	forvalues bb = 1/`B'{
+		preserve
+		qui bsample 
+			
+			
+		* CALL MYFUN_HOM_NEW()
+			
+		local quant `tau'
+		forvalues j = 1/`J'{
+			local tau1 = `tau'*l[1,`j']
+			local quant `quant' `tau1'
+		} 
+		qui sqreg `varlist',quantile(`quant') r(2) cformat(%10.0g)
+		mat pf = e(b)'	
+			
+		local PF  pf
+		mata: myfun_hom_new("`phi'","`sigmahat'", "`ll'","`PF'", `d')
+		mat par_bootstraphomb[1,`bb'] = e(beta)
+			
+		restore
 	}
 	local Par_bootstraphomb par_bootstraphomb
 	mata: stat("`Par_bootstraphomb'", `J', `dbb',`chibb')
 	local std_b e(std_b)
 	local specificationtest e(specificationtest)
 	
+	di in gr "End second loop"
+	di "$S_TIME"	
 	
 	* RETURNS IN ECLASS
 	
@@ -111,7 +176,7 @@ program eqreg,eclass
 	ereturn scalar specificationtest =`specificationtest'
 	
 	* MATRIX
-	ereturn matrix beta_hom = `beta_hom'
+	ereturn matrix beta_hom = beta_hom
 	
 	* DISPLAY
 	
@@ -134,8 +199,8 @@ mata set matastrict on
 
 //------------------------------------------------------------------------------
 //myfun_hom_new.m
-void myfun_hom_new(string scalar varlist,string scalar touse, string matrix Phi, ///
-					string matrix sigma, real scalar tau)
+void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
+					  string matrix PF, real scalar dd)
 {
 
 /*******************************************************************************\
@@ -156,21 +221,16 @@ void myfun_hom_new(string scalar varlist,string scalar touse, string matrix Phi,
 * dis_b: J-test statistic for this specification.                               *
 \*******************************************************************************/
 
-	real scalar T, dd, JJ, dbb, i, j
-	real matrix Z, X, Y, l, phi, Sigma
-	st_view(Z=.,.,tokens(varlist),touse)
-	Y = -Z[.,1]
-	X = Z[|1,2\.,.|]
-	T = rows(X)
-	X = (J(T,1,1) , X)
-	dd = cols(X)
-	l = (0.65,0.85,1.15,1.45)
+	real scalar  JJ, dbb, i, j
+	real matrix  l, phi, Sigma, temppf, pf
+	l = st_matrix(ll)
 	JJ = cols(l)
 	phi = st_matrix(Phi)
 	dbb = sum(phi)
 	Sigma = st_matrix(sigma)
-
-    //Convert vector phi into a matrix which picks out the covariates that are 
+	temppf = st_matrix(PF)
+	
+	//Convert vector phi into a matrix which picks out the covariates that are 
 	//homoskedastic.
 	real scalar Count, counta
 	real matrix phitemp
@@ -201,15 +261,12 @@ void myfun_hom_new(string scalar varlist,string scalar touse, string matrix Phi,
 	Gamma3 = diag(1:/sqrt(l1))
 	
 	// The first step: extremal quantile regression
-	real matrix tempy2, pf
+	real matrix tempy2
 	tempy2 = J(dbb*(JJ+1),1,0)
-	pf = J(dd,JJ+1,0)
-	pf[.,1] = rq_fnm(X,-Y,tau)
-	tempy2[|1,1\dbb,1|] = phitemp * pf[|2,1\.,1|]
 	
-	for(j=1;j<=JJ;j++){
-		pf[.,j+1] = rq_fnm(X,-Y,tau*l[j])
-		tempy2[dbb*j+1..dbb*(j+1)] = phitemp * pf[|2,j+1\.,j+1|]
+	for(j=1;j<=JJ+1;j++){
+		// Be careful aboout the subscript of pf
+		tempy2[dbb*(j-1)+1..dbb*j] = phitemp * temppf[(j-1)*dd+1..(j*dd-1)]
 	}
 	// The second step: minimum distance estimation 
 	real matrix omega_0, W2, mom2,  GpG, beta
@@ -218,11 +275,11 @@ void myfun_hom_new(string scalar varlist,string scalar touse, string matrix Phi,
 	GpG = Gamma3 # (phitemp * Gamma2)
 	W2 = luinv(GpG * (L # omega_0) * GpG' )                                     //W2 is the optimal weighting matrix for homo beta
 	beta = - luinv(J(JJ+1,1,I(dbb))' * W2 * J(JJ+1,1,I(dbb))) * J(JJ+1,1,I(dbb))' * W2 * tempy2
-	mom2 = J(JJ*dbb, 1, 0)
+	mom2 = J((JJ+1)*dbb, 1, 0)
 	for(j = 1; j <= JJ; ++j){
-		mom2[dbb*(j-1)+1..dbb*j,1] = phitemp * pf[|2,j\.,j|] + beta             //mom2 is the value of moments for homo beta
+		// Be careful aboout the subscript of pf
+		mom2[dbb*(j-1)+1..dbb*j,1] = tempy2[dbb*(j-1)+1..dbb*j] + beta             //mom2 is the value of moments for homo beta
 	}
-	mom2 = mom2\(phitemp * pf[|2,JJ+1\.,JJ+1|] + beta )
 	dis_b =  mom2' * W2 * mom2                                                  //here we compute the distance of homo beta evaluated at extremal quantile estimator of delta
 	
 	st_matrix("e(beta)",beta)
@@ -257,139 +314,6 @@ void stat(string matrix Par_bootstraphomb, real scalar J, real scalar dbb, ///
 	specificationtest = 1 - chi2(J*dbb,chibb)
 	st_numscalar("e(std_b)",std_b)
 	st_numscalar("e(specificationtest)",specificationtest)
-}
-
-
-//------------------------------------------------------------------------------
-//rq_fnm
-
-real matrix rq_fnm(real matrix X, real matrix y, real scalar q)
-{
-	real scalar m
-	m = rows(X)
-		
-	real matrix u, a, b
-	u = J(m,1,1)
-	a = (1 - q) :* u
-	b = -lq_fnm(X', -y', X' * a, u, a)'
-	
-	return (b)
-}
-//------------------------------------------------------------------------------
-//
-real matrix lq_fnm(A,c,b,u,x )
-{
-	// Set some constants
-	real scalar beta, small, max_it, m, n
-	beta = 0.9995
-	small = 1e-5
-	max_it = 50
-	m = rows(A)
-	n = cols(A)
-	
-	//generate initial feasible point
-	real matrix s, y, r, z, w
-	real scalar gap
-	s =  u - x
-	y = (invsym(A * A') * A * c')'
-	r = c - y * A
-	r = r + 0.001 * (r :== 0)
-	z = r :* (r :> 0)
-	w = z - r
-	gap = c * x - y * b + w * u
-	
-	//Start iterations
-	real scalar it
-	real matrix q, Q, AQ, rhs, dy, dx, dss, dz, dw, fx, fs, fxfs, fw, fz, fwfz, ///
-				fpp, fd, mu, g, dxdz, dsdw, xinv, sinv, xii
-	it = 0
-	while((gap > small) & (it < max_it)){
-		it = it + 1
-		
-		//Compute affine step
-		q = 1 :/ (z' :/ x + w' :/ s)
-		r = z - w
-		Q = diag(sqrt(q))
-		AQ = A * Q
-		rhs = Q * r'
-		dy = (invsym(AQ * AQ') * AQ * rhs)'
-		dx = q :* (dy * A - r)'
-		dss = -dx
-		dz = -z :* (1 :+ dx :/ x)'
-		dw = -w :* (1 :+ dss :/ s)'
-		
-		//Compute maximum allowable step lengths
-		fx = bound(x,dx)
-		fs = bound(s,dss)
-		fw = bound(w,dw)
-		fz = bound(z,dz)
-		fxfs = (fx, fs)
-		fpp = rowmin(fxfs)
-		fwfz = (fw, fz)
-		fd = rowmin(fwfz)
-		fpp = min((min(beta :* fpp),1))
-		fd = min((min(beta :* fd),1))
-
-	
-	//If full step is feasile, take it. Otherwise modeify it
-	if (min((fpp,fd)) < 1){
-		//Update mu
-		mu = z * x + w * s
-		g = (z + fd * dz) * (x + fpp *dx) + (w + fd * dw) * (s + fpp * dss)
-		mu = mu * (g/mu)^3 /(2*n)
-		
-		//Compute modified step
-		dxdz = dx :* dz'
-		dsdw = dss :* dw'
-		xinv = 1 :/ x
-		sinv = 1 :/ s
-		xii = mu * (xinv - sinv)
-		rhs = rhs + Q * (dxdz - dsdw - xii)
-		dy = (invsym(AQ * AQ') * AQ * rhs)'
-		dx = q :* (A' * dy' + xii - r' - dxdz +dsdw)
-		dss = -dx
-		dz = mu * xinv' - z - xinv' :* z :* dx' - dxdz'
-		dw = mu * sinv' - w - sinv' :* w :* dss' - dsdw'
-		
-		//Compute maximum allowable step lengths
-		fx = bound(x,dx)
-		fs = bound(s,dss)
-		fw = bound(w,dw)
-		fz = bound(z,dz)
-		fpp = bound(fx,fs)
-		fxfs = (fx, fs)
-		fpp = rowmin(fxfs)
-		fwfz = (fw, fz)
-		fd = rowmin(fwfz)
-		fpp = min((min(beta :* fpp),1))
-		fd = min((min(beta :* fd),1))
-		
-		}
-	
-	//Take the step
-	x = x + fpp * dx
-	s = s + fpp * dss
-	y = y + fd * dy
-	w = w + fd * dw
-	z = z + fd * dz
-	gap = c * x - y * b + w * u
-	
-	}
-	return (y)
-}
-//------------------------------------------------------------------------------
-//
-real matrix bound(x,dx)
-{
-	real matrix b, f
-	b = 1e20 :+ (0 :* x)
-	f = (dx :< 0)
-	
-	real matrix ind
-	ind = selectindex(f)
-	b[ind] = - x[ind] :/ dx[ind]
-	
-	return (b)
 }
 
  
