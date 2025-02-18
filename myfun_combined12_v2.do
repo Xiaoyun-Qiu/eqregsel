@@ -17,8 +17,8 @@ program eqreg,eclass
 	
 	local d: word count `varlist'
 	
-	gettoken depvar 0 : varlist
-	replace `depvar' = -`depvar'
+	//gettoken depvar 0 : varlist
+	//replace `depvar' = -`depvar'
 	
 	local G  `grid'
 	local B  `btp'
@@ -249,8 +249,8 @@ program eqreg,eclass
 	mat Phi = `phi'
 	tokenize `varlist'
 	local i=1
-	//mat colnames beta_hom = "`1'"
-	mat colnames beta_hom = "`depvar'"
+	mat colnames beta_hom = "`1'"
+	//mat colnames beta_hom = "`depvar'"
 	mac shift
 	while "`1'" != "" {
 		scalar index =  Phi[1,`i']

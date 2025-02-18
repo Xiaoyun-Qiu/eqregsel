@@ -7,31 +7,27 @@
 
 capture program drop eqreg
 program eqreg,eclass 
-	version 12
-	syntax varlist(min=2 numeric) [if] [in]  [, Grid(integer 20) BTP(integer 200) Boots(real 600) ]
+	//version 13
+	//syntax varlist(min=2 numeric) [if] [in] , HOMoskedastic(numlist >=0 <=1 integer) [Boots(real 600)]
+	syntax varlist(min=2 numeric) [if] [in] , [Boots(real 600)]
 	marksample touse
 	tokenize `varlist'
 	
 	// Assume right now users pass -Y into the varlist!!!
 	* PARAMETERS
 	
-	local d: word count `varlist'
-	
-	gettoken depvar 0 : varlist
-	replace `depvar' = -`depvar'
-	
-	local G  `grid'
-	local B  `btp'
+	local G = 1
+	local B = 300
 	matrix l = (0.65, 0.85, 1.15, 1.45)
 	local J = colsof(l)
-
+	local d: word count `varlist'
 	qui count
 	local N = r(N) 
-	local lower = min(80/`boots',0.1)
-	local upper = 0.3
+	//local lower = min(80/`boots',0.1)
+	local lower = 0.205
+	local upper = 0.205
 	local step = (`upper' - `lower')/`G'
-	mat Phi = J(1,`d',0)
-	mat Phi[1,1] = 1
+	mat Phi = (1,0,0,0,0)
 	
 	local phi Phi
 	mat ss = J(1, colsof(`phi'),1) * (`phi')'
@@ -109,22 +105,7 @@ program eqreg,eclass
 		}
 		
 		local tloop2 "$S_TIME"
-		
-		* Selecting the optimal tau
-		local Chi_bootbb  chi_bootbb
-		local Par_bootb  par_bootb
-		mata: IC("`Chi_bootbb'", "`Par_bootb'",`J',`dbb',`B',`boots',`N',`tau')
-		local disbbtemp = e(disbbtemp)
-
-		if(`disbbtemp' < disbb){
-			scalar disbb = `disbbtemp'
-			mat Sigmahat = Sigma
-			mat beta_hom = beta
-			local chibb = `dis_b'
-			local tau0 = `tau'		
-		}
-		
-		* Estimate computation time
+	
 		if(`gg'==1){
 			local hdiff = real(substr("`tloop2'",1,2)) - real(substr("`tloop1'",1,2))
 			local mdiff = real(substr("`tloop2'",4,2)) - real(substr("`tloop1'",4,2))
@@ -135,65 +116,32 @@ program eqreg,eclass
 			di 
 			di in ye "The estimation will take about " in wh "`esttime'" _c
 			di in ye " minutes." 
-		}
-		
-		* Printing progress bar if G >= 10
-		if(`G'>=10 & `gg'==1){
-			
-			* Display the bar
-			forvalues ss = 1/`G'{
-				tempname per
-				local per = (`ss'-1)/`G' 
-				if(`per'==0 | `per'==0.2 | `per'==0.4 | `per'==0.6| `per'==0.8){ 
-					di "|-" _c 
-				}
-				else if(`ss'==`G'){ 
-					di "-|" 
-				}
-				else{ 
-					di "--" _c 
-				}
-			}
-			
-			* Display progress
-			forvalues ss = 1/`G'{
-				tempname per
-				local per = (`ss'-1)/`G' 
-				if(`per'==0){   
-					di "0" _c 
-				}
-				else if(`per'==0.2){  
-					di "20" _c  
-				}
-				else if(`per'==0.4) {  
-					di "40" _c   
-				}
-				else if(`per'==0.6) {  
-					di "60" _c   
-				}
-				else if(`per'==0.8) {   
-					di "80" _c  
-				}
-				else if(`ss'==`G'){  
-					di "100"      
-				}
-				else{  
-					di "  " _c  
-				}
-			}
-			
+			di "|---------------|---------------|---------------|---------------|--------------|"
+			di "0              20%             40%             60%             80%           100%"
 			di ". " _c
 		}
-		else if(`G'>=10 & `gg'>1 & `gg'<=`G'){
+		else if(`gg'>1 & `gg'<=39){
 			di ". " _c
-		}
-		else if(`G'>=10){
+			}
+		else{
 			di "."
-		}
-	
-		
+			}
 
-		
+		local Chi_bootbb  chi_bootbb
+		local Par_bootb  par_bootb
+		mata: IC("`Chi_bootbb'", "`Par_bootb'",`J',`dbb',`B',`boots',`N',`tau')
+		local disbbtemp = e(disbbtemp)
+
+		//if(`disbbtemp' < disbb){
+		if(`tau' == 0.205){
+			scalar disbb = `disbbtemp'
+			mat Sigmahat = Sigma
+			mat beta_hom = beta
+			local chibb = `dis_b'
+			local tau0 = `tau'		
+		}
+		di `chibb'
+		di disbb
  	}
 
 	
@@ -239,18 +187,17 @@ program eqreg,eclass
 	
 	
 	* DISPLAY
-	di ""
+	di 
 	di in gr "Optimal quantile index = " %10.0g e(tau0)
 	//di in gr "Bootstrapped standard deviation = " %10.0g e(std_b)
 	di in gr "Specification test = " %10.0g e(specificationtest)
-	di ""
+	di 
 	* Display the results in a table
 
 	mat Phi = `phi'
 	tokenize `varlist'
 	local i=1
-	//mat colnames beta_hom = "`1'"
-	mat colnames beta_hom = "`depvar'"
+	mat colnames beta_hom = "`1'"
 	mac shift
 	while "`1'" != "" {
 		scalar index =  Phi[1,`i']
@@ -331,7 +278,99 @@ program qreg_simplified12, eclass byable(recall) sort prop(sw mi)
 				*/ quant(`quant') `options'
 			
 end
+//------------------------------------------------------------------------------
+//
+capture program drop qreg_simplified
+capture program drop Estimate
+program qreg_simplified, eclass byable(recall) prop(sw mi)
+	
+	local vv : di "version " string(_caller()) ":"
 
+	`vv' `BY' Estimate `0'
+end
+
+program Estimate, eclass byable(recall) sort prop(sw mi)
+	local vc = _caller()
+	local cmdline : copy local 0
+	//version 13, missing
+
+	if `vc' <= 12 {
+		syntax varlist(numeric fv) [fw aw] [if] [in] [,		///
+				Quantile(real 0.5) WLSiter(integer 1)	///
+				noLOg Level(cilevel) * ]
+	}
+	else {
+		syntax varlist(numeric fv) [fw aw iw pw] [if] [in] [,	///
+				Quantile(real 0.5) WLSiter(integer 1)	///
+				vce(string) noLOg Level(cilevel) * ]
+	}
+	_get_diopts diopts options, `options'
+	local fvops = ("`s(fvops)'"=="true" | `vc'>12)
+
+	tempname quant
+	local quant = `quantile'
+	if (`quant'>=1) local quant = `quant'/100
+
+	if `quant' <= 0 | `quant' >= 1 {
+		di as err "{bf:quantile(`quantile')} is out of range"
+		exit 198
+	}
+	if `wlsiter' < 1 { 
+		di as err "{p}{bf:wlsiter(`wlsiter')} must be a positive " ///
+		 "integer{p_end}"
+		exit 198 
+	}
+	if "`weight'" != "" {
+		local wweight `weight'
+		if ("`weight'"=="pweight") local wweight iweight
+
+		local weights [`wweight'`exp']
+	}
+
+	marksample touse
+	qui count if `touse'
+	local N = r(N)
+	if (!`N') error 2000
+	if (`N'<=2) error 2001
+
+	gettoken dep indep : varlist
+
+	if (`fvops') local mse1 mse1
+	else local rmopt forcedrop
+
+	_rmcoll `indep' `weights' if `touse', `rmopt'
+	local indep `r(varlist)' 
+	local varlist `dep' `indep'
+
+	tempvar r i p
+	qui gen long `i' = _n
+
+	/* initial estimates via weighted least squares 		*/
+	_qregwls `varlist' `weights' if `touse', r(`r') ///
+		iterate(`wlsiter') quant(`quant') `log'
+
+	if ("`log'"!="") local qui quietly
+
+	/* stable sort							*/
+	sort `r' `i'
+	drop `r'
+	drop `i'
+
+	`qui' _qreg `varlist' if `touse' `weights', quant(`quant') ///
+			`opopts'
+
+	tempname b f_r rq rsd msd sum_w
+
+	mat `b' = e(b)
+
+	ereturn post `b' , esample(`touse')
+
+	global S_E_cmd "qreg"
+	ereturn local predict "qreg_p"
+	ereturn local cmdline `"qreg `cmdline'"'
+	ereturn local cmd "qreg"
+
+end
 //------------------------------------------------------------------------------
 //Mata part: main function
 mata:
@@ -408,7 +447,9 @@ void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
 	tempy2 = J(dbb*(JJ+1),1,0)
 	// Be careful aboout the subscript of pf
 	tempy2[|1,1\dbb,1|] = phitemp * pf[|1,1\dd-1,1|]
-		
+	
+
+	
 	for(j=1;j<=JJ;j++){
 		// Be careful aboout the subscript of pf
 		tempy2[dbb*j+1..dbb*(j+1)] = phitemp * pf[|1,j+1\dd-1,j+1|]

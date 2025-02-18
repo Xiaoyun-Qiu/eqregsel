@@ -1,32 +1,29 @@
-/*******************************************************************************\
-* Based on myfun_combined_v2.do in the version 3 folder
-* Modified in 4 June, 2016                        
-* version 3.0                                    
-* Use STATA command qreg to do all quantile regressions  
-\*******************************************************************************/
+* ado file for extremal quantile regression for selection models
+* Coded by Xiaoyun Qiu
+* 19june2016
 
-capture program drop eqreg
 program eqreg,eclass 
 	version 12
-	syntax varlist(min=2 numeric) [if] [in]  [, Grid(integer 20) BTP(integer 200) Boots(real 600) ]
+	syntax varlist(min=2 numeric) [, Grid(integer 20) BTP(integer 200) Boots(real 600) ]
 	marksample touse
-	tokenize `varlist'
+	quietly count if `touse'
+	if `r(N)' == 0 error 2000
+	local N = r(N)
+	//tokenize `varlist'
 	
 	// Assume right now users pass -Y into the varlist!!!
 	* PARAMETERS
 	
 	local d: word count `varlist'
 	
-	gettoken depvar 0 : varlist
-	replace `depvar' = -`depvar'
+	gettoken depvar varlist : varlist
+	gen y = -`depvar'
 	
 	local G  `grid'
 	local B  `btp'
 	matrix l = (0.65, 0.85, 1.15, 1.45)
 	local J = colsof(l)
-
-	qui count
-	local N = r(N) 
+	 
 	local lower = min(80/`boots',0.1)
 	local upper = 0.3
 	local step = (`upper' - `lower')/`G'
@@ -46,7 +43,7 @@ program eqreg,eclass
 	forvalues gg = 1/`G'{
 		
 		local tau = `lower' + `step' * `gg'
-		qui qreg_simplified12 `varlist',quantile(`tau') cformat(%10.0g)
+		qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
 		mat theta = e(b)'
 		mat thetatemp = J(`d',`B',0)
 		
@@ -55,7 +52,7 @@ program eqreg,eclass
 		forvalues bb = 1/`B'{
 			preserve
 			qui bsample 
-			qui qreg_simplified12 `varlist',quantile(`tau') cformat(%10.0g)
+			qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
 			mat thetatemp[1,`bb'] = e(b)'
 			restore
 		}
@@ -68,11 +65,11 @@ program eqreg,eclass
 		* CALL MYFUN_HOM_NEW()
 			
 		mat pf = J(`d',`J'+1,0)
-		qui qreg_simplified12 `varlist',quantile(`tau') cformat(%10.0g)
+		qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
 		mat pf[1,1] = e(b)'
 		forvalues j = 1/`J'{
 			local tau1 = `tau'*l[1,`j']
-			qui qreg_simplified12 `varlist',quantile(`tau1') cformat(%10.0g)
+			qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
 			mat pf[1,`j'+1] = e(b)'		
 		} 
 		
@@ -93,11 +90,11 @@ program eqreg,eclass
 			* CALL MYFUN_HOM_NEW()
 			
 			mat pf = J(`d',`J'+1,0)
-			qui qreg_simplified12 `varlist',quantile(`tau') cformat(%10.0g)
+			qui qreg_simplified12 y `varlist',quantile(`tau') cformat(%10.0g)
 			mat pf[1,1] = e(b)'
 			forvalues j = 1/`J'{
 				local tau1 = `tau'*l[1,`j']
-				qui qreg_simplified12 `varlist',quantile(`tau1') cformat(%10.0g)
+				qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
 				mat pf[1,`j'+1] = e(b)'		
 			} 
 			
@@ -190,10 +187,6 @@ program eqreg,eclass
 		else if(`G'>=10){
 			di "."
 		}
-	
-		
-
-		
  	}
 
 	
@@ -209,11 +202,11 @@ program eqreg,eclass
 		* CALL MYFUN_HOM_NEW()
 			
 		mat pf = J(`d',`J'+1,0)
-		qui qreg_simplified12 `varlist',quantile(`tau0') cformat(%10.0g)
+		qui qreg_simplified12 y `varlist',quantile(`tau0') cformat(%10.0g)
 		mat pf[1,1] = e(b)'
 		forvalues j = 1/`J'{
 			local tau1 = `tau0'*l[1,`j']
-			qui qreg_simplified12 `varlist',quantile(`tau1') cformat(%10.0g)
+			qui qreg_simplified12 y `varlist',quantile(`tau1') cformat(%10.0g)
 			mat pf[1,`j'+1] = e(b)'		
 		} 
 			
@@ -228,14 +221,14 @@ program eqreg,eclass
 	mata: stat("`Par_bootstraphomb'", `J', `dbb',`chibb')
 	mat std_b = e(std_b)
 	mat V = diag(std_b)*diag(std_b)
-	local specificationtest e(specificationtest)
+	local specificationtest = e(specificationtest)
 	local df_r = 99999999
 	
 	* RETURNS IN ECLASS
-	
+	ereturn clear
 	ereturn scalar tau0 = `tau0'
 	ereturn scalar specificationtest =`specificationtest'
-	ereturn scalar df_r = `df_r'
+	//ereturn scalar df_r = `df_r'
 	
 	
 	* DISPLAY
@@ -276,15 +269,11 @@ program eqreg,eclass
 	ereturn matrix std_b = std_b
 	ereturn matrix v = V
 		
-	* MATRIX
-	//matlist e(beta_hom)
-	//matlist e(std_b)
 	
 end
 
 //-----------------------------------------------------------------------
-//qreg_simplified12
-capture program drop qreg_simplified12
+//qreg_simplified12, Simplified version of qreg command
 program qreg_simplified12, eclass byable(recall) sort prop(sw mi)
 	version 6, missing
 	local options "Level(cilevel)"
