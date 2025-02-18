@@ -49,8 +49,8 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 	X = (J(N,1,1) , X)
 	dv = cols(X)
 	
-	//gridid = ((grid[.,1] + grid[.,2]) :< 2)
-	//grid = select(grid,gridid)
+	gridid = ((grid[.,1] + grid[.,2]) :< 2)
+	grid = select(grid,gridid)
 	grid = grid'
 	gridnp = grid[|1,1\xdnum+xcnum,.|]
 	
@@ -60,10 +60,10 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 	real scalar G, JJ, B, boots, mm, b0, d0, lower, upper, step, dd, dbb, i, j, b, gg, R
 	real matrix l, ciboot1, phi, nb_mse, disd, disbd, disbb, disdbias, disbbbias, disbdbias
 				
-	G = 4
+	G = 40
 	l = (0.65,0.85,1.15,1.45)
 	JJ = cols(l)
-	B = 5
+	B = 500
 	boots = 550
 	R = 200
 	mm = 1.2
@@ -140,10 +140,10 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 		timer_off(1)
 	}
 			
-			st_matrix("e(nb_mse)",nb_mse)
-			st_matrix("e(par_mse)",par_mse)
-			st_matrix("e(par_hom)",par_hom)
-			st_matrix("e(chid)",chid)
+	st_matrix("e(nb_mse)",nb_mse)
+	st_matrix("e(par_mse)",par_mse)
+	st_matrix("e(par_hom)",par_hom)
+	st_matrix("e(chid)",chid)
 	//--------------------------------------------------------------------------
 	//line 124
 	real matrix tempchi_bootd, tempchi_bootbd, tempchi_bootbb
@@ -168,7 +168,7 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 			tau = lower + step * gg
 			myfun_hetero(tau,mm,b0,d0,X,Y,l,tempmse,tempdis)
 			tempchi_bootd[b,gg] = tempdis
-			//HERE!!
+			//(*par_boot[b])[gg] = &(tempmse) This line should be wrong.
 			(*par_boot[b])[gg] = &(tempmse[|1,1\dv-1,1|])
 		    myfun_hom(tau,mm,phi,X,Y,l,tempmse,tempdis_d,tempdis_b)
 			(*par_bootb[b])[gg] = &(tempmse)
@@ -194,8 +194,9 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 				delta_mse, delta_hom, beta_hom
 	real scalar gstard, gstarbd, gstarbb
 	w = (0,0)
-	//tempboot1 = J(dv-1,G,0)
-	//tempboot2 = J(dv-1,G,0)
+	//HERE!!
+	tempboot1 = J(dv-1,G,0)
+	tempboot2 = J(dv-1,G,0)
 	for(gg=1;gg<=G;gg++){
 			tempboot1 = *(*par_boot[1])[gg]
 			tempboot2 = *(*par_bootb[1])[gg]
@@ -281,9 +282,8 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 	temp_bootstraphomd = (0)
 	
 	for(b=1;b<=B;b++){
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
+		idz = 1::N
+		tempidz = jumble(idz)
 		Zz = Z[tempidz,.]
 		X = Zz[|1,2\.,.|]
 	    X = (J(N,1,1) , X)
@@ -371,9 +371,8 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 	
 		
 	for(j=1;j<=500;j++){
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
+		idz = 1::N
+		tempidz = jumble(idz)
 		Zz = Z[tempidz,.]
 		X= Zz[|1,2\.,.|]
 		X = (J(N,1,1) , X)
@@ -383,7 +382,7 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 	
 	ci_med95 = (mm_quantile(beta_median_boot',1,0.025)',mm_quantile(beta_median_boot',1,0.975)')
 	ci_med975 = (mm_quantile(beta_median_boot',1,0.0125)',mm_quantile(beta_median_boot',1,0.9875)')
-	
+	/*
 	//CLR bound for qth-QTE of the heteroskedastic variables
 	
 	real scalar M, r, rn, knv, knv2, temptheta1, temptheta2
@@ -522,7 +521,7 @@ void myfun_combined(string scalar varlist,string scalar touse, |string scalar in
 		qstarbd = lower + step * gstarbd
 		qstarbb = lower + step * gstarbb
 		
-	}
+	}*/
 	
 }
 

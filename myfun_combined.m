@@ -32,8 +32,7 @@ d0 = 1;
 G = 40; 
 l = [0.65,0.85,1.15,1.45]; 
 B = 500;
-%boots = floor(0.6*N*(N<500) + (300 + 0.4*(N-500))*(N<1000)+(500+1/10*(N-1000))*(N<1000)+(600+0.2*(N-2000)));
-boots = 550;
+boots = floor(0.6*N*(N<500) + (300 + 0.4*(N-500))*(N<1000)+(500+1/10*(N-1000))*(N<1000)+(600+0.2*(N-2000)));
 R = 200;
 m = 1.2;
 
@@ -103,8 +102,7 @@ beta_hetero = par_hetero(d:2*(d-1),gstard);
 V_hetero_star = V_hetero(:,:,gstard);
 Nb_hetero_star = nb_hetero(gstard,1);
 %% pretest delta = 0 using critical value C_n = sqrt(log(n))
-%phi = (abs(delta_hetero)<log(N)^(1/2)*sqrt(diag(V_hetero_star)/(N*(lower+step*gstard))))';
-phi = [1,1,0,1,1];
+phi = (abs(delta_hetero)<log(N)^(1/2)*sqrt(diag(V_hetero_star)/(N*(lower+step*gstard))))';
 %% estimate the parital homoskedasitic model
 dd = d - 1 - sum(phi); % dd is the number of nonzero delta after the test
 db = sum(phi);  % db is the number of zero deltas after the test (i.e. number of beta we can compute)
@@ -215,28 +213,28 @@ parfor m = 1:M
     Sl(m,1)= temps;
 end
 rn = 1-0.1/log(N);
-Zussmax = max(Zu_ss)
+Zussmax = max(Zu_ss);
 knv = quantile(Zussmax,rn);
 
 row2 = (thetau < min(thetau + knv*Su)+2*knv*Su); %compute the contact set \hat{\mathcal{X}}_n in appendix A.1 for the upper bound
 
 row2 = row2.*(1:length(row2))';
 row2 = row2(row2~=0);
-Zu_ss2 = Zu_ss(row2,:)
-Zuss2max = max(Zu_ss2)
-knv2 = quantile(Zuss2max,0.975) % K_{2n}(0.975) in the second last equation of appendix A.1 for the upper bound
+Zu_ss2 = Zu_ss(row2,:);
+Zuss2max = max(Zu_ss2);
+knv2 = quantile(Zuss2max,0.975); % K_{2n}(0.975) in the second last equation of appendix A.1 for the upper bound
 theta0(j,2) = min(thetau + knv2*Su);
 
-Zlssmax = max(Zl_ss)
+Zlssmax = max(Zl_ss);
 knv = quantile(Zlssmax,rn);
 
 row2 = (thetal < min(thetal + knv*Sl)+2*knv*Sl);  %compute the contact set \hat{\mathcal{X}}_n in appendix A.1 for the lower bound
 
 row2 = row2.*(1:length(row2))';
 row2 = row2(row2~=0);
-Zl_ss2 = Zl_ss(row2,:)
-Zlss2max = max(Zl_ss2)
-knv2 = quantile(Zlss2max,0.975) % K_{2n}(0.975) in the second last equation of appendix A.1. 97.5% quantile of  -X = - 2.5% quantile of X 
+Zl_ss2 = Zl_ss(row2,:);
+Zlss2max = max(Zl_ss2);
+knv2 = quantile(Zlss2max,0.975); % K_{2n}(0.975) in the second last equation of appendix A.1. 97.5% quantile of  -X = - 2.5% quantile of X 
 theta0(j,1) = -min(thetal + knv2*Sl);
 end
         

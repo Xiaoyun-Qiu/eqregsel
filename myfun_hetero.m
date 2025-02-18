@@ -82,7 +82,4 @@ dis = Nb^2*mom*W*mom'; % this is the value of distance
 beta = - pf(2:end,1) + delta/d0*pf(1,1);
 out(d:2*d-2,1) = beta; 
 Nb1 = abs(sqrt(tau*T)/median((pf(1,:))));
-
 end
-
-

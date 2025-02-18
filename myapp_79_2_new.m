@@ -1,5 +1,5 @@
 clear;
-%clc;
+clc;
 %%
 
 load('cooked79_2.mat');
@@ -61,16 +61,12 @@ X = [ones(length(Y),1),black,hispanic,age,AFQTO,AFQTO.^2];
 
 %%
 tic;
-%G = 40; 
+G = 40; 
 l = [0.65,0.85,1.15,1.45]; 
 % l = [0.4, 0.7, 1.3, 2];
 J = length(l);
-%B = 500;
+B = 500;
 boots = 550;
-
-B = 10;
-G = 4;
-
 m = 1.2;
 b0 = 0;
 d0 = 1;
@@ -105,9 +101,6 @@ par_hom = zeros(d-1,G);
 
 options = statset('UseParallel','always') ;
 
-display('Part 1: Setup')
-toc;
-
 median_d1 = median(random('chi2',(J-1)*(d-1),100000,1));
 median_d2 = median(random('chi2',(J-1)*(d-1-sum(phi)),100000,1));
 median_b1 = median(random('chi2',J*sum(phi),100000,1));
@@ -117,7 +110,6 @@ V_homd = zeros(dd,dd,G);
 chid = zeros(G,1);
 chibb = zeros(G,1);
 
-tic;
 
 for g = 1:G
 warning off 
@@ -129,16 +121,11 @@ nb_mse(g,1) = nbtemp;
 [temphom, V_homd(:,:,g), V_homb(:,:,g),Nb_hom(g,1),~,chibb(g,1)] = myfun_hom(lower+step*g,m,phi,X,Y,l);
 par_hom(:,g) = temphom;
 end
-
-display('Part 2: First loop (G)')
-toc;
 %%
 Z = [Y,X];
 tempchi_bootd = zeros(B,G);
 tempchi_bootbd = zeros(B,G);
 tempchi_bootbb = zeros(B,G);
-
-tic;
 
 parfor b = 1:B
 Zz = Z(randperm(N,boots),:);      
@@ -156,7 +143,6 @@ disdbias(:,1) = abs(median(tempchi_bootd) - median_d1);
 disbdbias(:,1) = abs(median(tempchi_bootbd) - median_d2);
 disbbbias(:,1) = abs(median(tempchi_bootbb) - median_b1);
 
-display('Part 3: second loop(B*G)')
 toc;
 
 
@@ -165,9 +151,6 @@ toc;
 
 
 %%
-
-tic;
-
 disdvar = zeros(G,1);
 disbdvar = disdvar;
 disbbvar = disdvar;
@@ -212,13 +195,7 @@ delta_hom = par_hom(1:dd,gstarbd);
 [A,gstarbb] = min(disbb);
 beta_hom = par_hom(dd+1:end,gstarbb);
 
-display('Part4: two loops')
-toc;
-
 %% bootstrap
-
-tic;
-
 for b = 1:B    
     Zz = Z(randsample(N,N,true),:);          
      [tempboot, ~,~,~] = myfun_MSE_new(lower+step*gstard,m,0,1,Zz(:,2:end),Zz(:,1),l);
@@ -282,11 +259,9 @@ std_hombboot = std(par_bootstraphomb,[],2);
 cibootbb95ps = [beta_hom-1.96*std_hombboot,beta_hom+1.96*std_hombboot];
 cibootbb975ps = [beta_hom-2.24*std_hombboot,beta_hom+2.24*std_hombboot];
 
-display('part5: B*3')
-toc;
-%%
 
-tic;
+
+%%
 
 specificationtest = [cdf('chi2',chid(gstard),(J-1)*(d-1)),cdf('chi2',chibb(gstarbb),J*sum(phi))];
 
@@ -299,8 +274,6 @@ end
 ci_med95 = [quantile(beta_median_boot,0.025,2), quantile(beta_median_boot,0.975,2)];
 ci_med975 = [quantile(beta_median_boot,0.0125,2), quantile(beta_median_boot,0.9875,2)];
 
-display('part6')
-toc;
 %%
 
 save(['app79_male_AFQTO',num2str(boots/1000),'_',num2str(G),'_',num2str(upper),'_',date,'.mat']);
