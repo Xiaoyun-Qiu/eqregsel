@@ -4,14 +4,12 @@
 
 program eqreg,eclass 
 	version 12
-	syntax varlist(min=2 numeric) [if] [in]  [, Hom(integer 1) Grid(integer 40) BTP(integer 150) Boots(real 0) ]
+	syntax varlist(min=2 numeric) [if] [in]  [, Hom(integer 1) Boots(integer 0) Grid(integer 40) BTP(integer 150)]
 	marksample touse
 	quietly count if `touse'
 	if `r(N)' == 0 error 2000
 	local N = r(N)
-	//tokenize `varlist'
 	
-	// Assume right now users pass -Y into the varlist!!!
 	* PARAMETERS
 	
 	local d: word count `varlist'
@@ -25,7 +23,40 @@ program eqreg,eclass
 	matrix l1 = (1,0.2)
 	local J = colsof(l)
 	local J1 = colsof(l1)
-	 
+	
+	if `G' <= 0 {
+		di in red "grid() does not accept negative value."
+		exit
+	}
+	
+	if `B' <= 0 {
+		di in red "btp() does not accept negative value."
+		exit
+	}
+	
+	if `boots' < 0{
+		di in red "boots() does not accept negative value."
+		exit
+	}
+	
+	if `hom' < 0{
+		di in red "hom() does not accept negative value."
+		exit
+	}
+	else if `hom' >= `d'{
+		di in red "hom() does not accept a value larger than the total number of independent variables."
+		exit
+	}
+	
+	* SPECIFY BOOTS
+	if `boots' == 0{
+		if `N'<=500                       local boots = 0.6*`N'
+		else if (`N'>500)&(`N'<=1000)     local boots = 300 + 0.4*(`N'-500)
+		else if (`N'>1000)&(`N'<=2000) 	  local boots = 500 + 0.2*(`N'-1000)
+		else                              local boots = 700 + 0.2*log(2000)/log(`N')*(`N'-2000)
+		local boots = floor(`boots')
+	}
+	
 	local lower = min(80/`boots',0.1)
 	local upper = 0.3
 	local step = (`upper' - `lower')/`G'
@@ -40,16 +71,9 @@ program eqreg,eclass
 
 	mat par_bootb = J(`dbb',`B',0)
 	mat chi_bootbb = J(`B',1,0)
-	scalar disbb = 10000000000000000000     // what is the usual scale of disbb???
+	scalar disbb = 10000000000000000000     
 	
-	* SPECIFY BOOTS
-	if `boots'== 0{
-		if `N'<=500                       local boots = 0.6*`N'
-		else if (`N'>500)&(`N'<=1000)     local boots = 300 + 0.4*(`N'-500)
-		else if (`N'>1000)&(`N'<=2000) 	  local boots = 500 + 0.2*(`N'-1000)
-		else                              local boots = 700 + 0.1*(`N'-2000)
-		local boots = floor(`boots')
-	}
+	
 	
 	* SELECT OPTIMAL TAU
 	forvalues gg = 1/`G'{
@@ -198,8 +222,10 @@ program eqreg,eclass
 			di "."
 		}
  	}
-
 	
+	
+	ereturn post
+	ereturn clear
 		
 	* BOOTSTRAP THE CONFIDENCE INTERVAL
 	
@@ -226,11 +252,12 @@ program eqreg,eclass
 	}
 	
 	local Par_bootstraphomb par_bootstraphomb
+	
 	mata: stat("`Par_bootstraphomb'", `J1', `dbb',`chibb')
+	local specificationtest e(specificationtest)
 	mat std_b = e(std_b)
 	mat V = diag(std_b)*diag(std_b)
-	local specificationtest e(specificationtest)
-	local df_r = 99999999
+	
 	
 	* RETURNS IN ECLASS
 	
@@ -238,7 +265,6 @@ program eqreg,eclass
 	ereturn scalar specificationtest =`specificationtest'
 	ereturn scalar boots = `boots'
 	ereturn scalar homvar = `hom'
-	//ereturn scalar df_r = `df_r'
 	
 	
 	* DISPLAY
@@ -246,17 +272,15 @@ program eqreg,eclass
 	di in gr "Optimal quantile index = " %10.0g e(tau0)
 	//di in gr "Bootstrapped standard deviation = " %10.0g e(std_b)
 	di in gr "Specification test = " %10.0g e(specificationtest)
-	di in gr "The sample size used in bootstrapping = " %10.0g e(boots)
-	di in gr "The number of homoskedastic variables = " %10.0g e(homvar)
+	di in gr "Subsampling size used in bootstrapping = " %10.0g e(boots)
+	di in gr "Number of variables of interest = " %10.0g e(homvar)
 	di ""
 	* Display the results in a table
 
 	mat Phi = `phi'
 	tokenize `varlist'
 	local i=1
-	//mat colnames beta_hom = "`1'"
 	mat colnames beta_hom = "`depvar'"
-	//mac shift
 	while "`1'" != "" {
 		scalar index =  Phi[1,`i']
 		if (index == 1){
@@ -271,8 +295,6 @@ program eqreg,eclass
 	mat rownames beta_hom = `names'
 	mat b = beta_hom'
 	
-	//_get_diopts diopts options, `options'
-	//_coef_table , bmatrix(b) vmatrix(V) `diopts'
 	_coef_table , bmatrix(b) vmatrix(V)
 	
 	* RETURNS IN ECLASS
