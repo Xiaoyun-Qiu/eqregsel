@@ -4,7 +4,7 @@
 
 program eqreg,eclass 
 	version 12
-	syntax varlist(min=2 numeric) [if] [in]  [, Grid(integer 20) BTP(integer 200) Boots(real 0) ]
+	syntax varlist(min=2 numeric) [if] [in]  [, Hom(integer 1) Grid(integer 20) BTP(integer 200) Boots(real 0) ]
 	marksample touse
 	quietly count if `touse'
 	if `r(N)' == 0 error 2000
@@ -28,7 +28,9 @@ program eqreg,eclass
 	local upper = 0.3
 	local step = (`upper' - `lower')/`G'
 	mat Phi = J(1,`d'-1,0)
-	mat Phi[1,1] = 1
+	forvalues i = 1/`hom'{
+		mat Phi[1,`i'] = 1
+	}
 	
 	local phi Phi
 	mat ss = J(1, colsof(`phi'),1) * (`phi')'
@@ -237,6 +239,7 @@ program eqreg,eclass
 	ereturn scalar tau0 = `tau0'
 	ereturn scalar specificationtest =`specificationtest'
 	ereturn scalar boots = `boots'
+	ereturn scalar homvar = `hom'
 	//ereturn scalar df_r = `df_r'
 	
 	
@@ -246,6 +249,7 @@ program eqreg,eclass
 	//di in gr "Bootstrapped standard deviation = " %10.0g e(std_b)
 	di in gr "Specification test = " %10.0g e(specificationtest)
 	di in gr "The sample size used in bootstrapping = " %10.0g e(boots)
+	di in gr "The number of homoskedastic variables = " %10.0g e(homvar)
 	di ""
 	* Display the results in a table
 

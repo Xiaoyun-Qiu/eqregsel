@@ -33,10 +33,8 @@ program eqreg,eclass
 	mat chi_bootbb = J(`B',1,0)
 	scalar disbb = 100
 	
-	di 
 	di in gr "Begin"
 	di "$S_TIME"
-	di 
 	
 	* SELECT OPTIMAL TAU
 	forvalues gg = 1/`G'{
@@ -79,10 +77,7 @@ program eqreg,eclass
 		mata: myfun_hom_new( "`phi'","`sigma'", "`ll'","`PF'", `d')
 		mat beta = e(beta)
 		local dis_b = e(dis_b)
-		
-		di in gr "1st loop" `gg'
-		di "$S_TIME"
-		
+
 		* Use subsample to compute the point estimator and J-test statistic
 		forvalues bb = 1/`B'{
 			preserve
@@ -104,14 +99,11 @@ program eqreg,eclass
 			mat chi_bootbb[`bb',1] = e(dis_b)
 			restore
 		}
-		di in gr "2nd loop" `gg'
-		di "$S_TIME"
-		
+			
 		local Chi_bootbb  chi_bootbb
 		local Par_bootb  par_bootb
 		mata: IC("`Chi_bootbb'", "`Par_bootb'",`J',`dbb',`B',`boots',`N',`tau')
 		local disbbtemp = e(disbbtemp)
-		di `disbbtemp'
 		if(`disbbtemp' < disbb){
 			scalar disbb = `disbbtemp'
 			mat Sigmahat = Sigma
@@ -150,7 +142,6 @@ program eqreg,eclass
 			
 			restore
 	}
-	
 	local Par_bootstraphomb par_bootstraphomb
 	mata: stat("`Par_bootstraphomb'", `J', `dbb',`chibb')
 	mat std_b = e(std_b)
@@ -159,7 +150,7 @@ program eqreg,eclass
 	
 	di in gr "End"
 	di "$S_TIME"
-	di 
+
 	
 	
 	* RETURNS IN ECLASS
@@ -189,9 +180,7 @@ program eqreg,eclass
 	mat colnames V = `names'
 	mat rownames beta_hom = `names'
 	mat b = beta_hom'
-	_get_diopts diopts options, `options'
-	_get_diopts diopts , `options'
-	_coef_table , bmatrix(b) vmatrix(V) `diopts'
+	_coef_table , bmatrix(b) vmatrix(V)
 	
 	* RETURNS IN ECLASS
 	* MATRIX
@@ -344,9 +333,9 @@ void myfun_hom_new( string matrix Phi, string matrix sigma,string matrix ll, ///
 	omega_0 = Sigma
 	GpG = Gamma3 # (phitemp * Gamma2)
 
-	W2 = luinv(GpG * (L # omega_0) * GpG' )                                     //W2 is the optimal weighting matrix for homo beta
+	W2 = invsym(GpG * (L # omega_0) * GpG' )                                     //W2 is the optimal weighting matrix for homo beta
 
-	beta = - luinv(J(JJ+1,1,I(dbb))' * W2 * J(JJ+1,1,I(dbb))) * J(JJ+1,1,I(dbb))' * W2 * tempy2
+	beta = - invsym(J(JJ+1,1,I(dbb))' * W2 * J(JJ+1,1,I(dbb))) * J(JJ+1,1,I(dbb))' * W2 * tempy2
 	mom2 = J(JJ*dbb, 1, 0)
 	for(j = 1; j <= JJ; ++j){
 		// Be careful aboout the subscript of pf
@@ -385,7 +374,7 @@ void stat(string matrix Par_bootstraphomb, real scalar J, real scalar dbb, ///
 	real matrix std_b,par_bootstraphomb
 	par_bootstraphomb = st_matrix(Par_bootstraphomb)
 	std_b = mm_colvar(par_bootstraphomb')'                                      //Compute the standard deviation.
-	//std_b = sqrt(std_b)
+	std_b = sqrt(std_b)
 	specificationtest = 1 - chi2(J*dbb,chibb)
 	st_matrix("e(std_b)",std_b)
 	st_numscalar("e(specificationtest)",specificationtest)
