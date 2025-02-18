@@ -1,90 +1,20 @@
-*! program myfun_combined Xiaoyun Qiu 5Aug2015
+*! program bootstrap Xiaoyun Qiu 8Oct2015
 
 
 //------------------------------------------------------------------------------
 //Stata program: creates a new command
-capture program drop myfun_combined
-program myfun_combined,eclass
+capture program drop btstrap
+program btstrap,eclass
 	version 13
-	syntax varlist(min=2 numeric) ,  Dnum(real) DFnum(real) CFnum(real) GRIDd(string) [Tau(real 0.5)]
+	
+	syntax varlist(min=2 numeric) [if] [in], Gstar(string) BMSE(string) DMSE(string) BHOM(string) DHOM(string)
 	marksample touse
 	tokenize `varlist'
 	
-	mata:myfun_combined("`varlist'","`touse'","`dnum'","`dfnum'","`cfnum'","`tau'","`gridd'")
+	mata:bstrap("`varlist'","`touse'","`gstar'","`bmse'","`dmse'","`bhom'","`dhom'")
 	
 	ereturn list
-	
-	mat delta_mse = e(delta_mse)
-	mat list delta_mse
-	mat beta_mse = e(beta_mse)
-	mat list beta_mse
-	mat delta_hom = e(delta_hom)
-	mat list delta_hom
-	mat beta_hom = e(beta_hom)
-	mat list beta_hom
-	mat V_mse_star = e(V_mse_star)
-	mat list V_mse_star
-	
-	mat cibootd95t = e(cibootd95t) 
-	mat list cibootd95t
-	mat cibootd975t = e(cibootd975t) 
-	mat list cibootd975t
-	
-	mat cibootb95t = e(cibootb95t) 
-	mat list cibootb95t
-	mat cibootb975t = e(cibootb975t) 
-	mat list cibootb975t
-	
-	mat cibootbb95t = e(cibootbb95t) 
-	mat list cibootbb95t
-	mat cibootbb975t = e(cibootbb975t) 
-	mat list cibootbb975t
-	
-	mat cibootdlogt = e(cibootdlogt) 
-	mat list cibootdlogt
-	
-	mat cibootd95t = e(cibootd95t) 
-	mat list cibootd95t
-	mat cibootd975t = e(cibootd975t) 
-	mat list cibootd975t
-	
-	mat cibootbd95p = e(cibootbd95p) 
-	mat list cibootbd95p
-	mat cibootbd975p = e(cibootbd975p) 
-	mat list cibootbd975p
-	
-	mat cibootbb95p = e(cibootbb95p) 
-	mat list cibootbb95p
-	mat cibootbb975p = e(cibootbb975p) 
-	mat list cibootbb975p
-	
-	mat ciboot95p = e(ciboot95p) 
-	mat list ciboot95p
-	mat ciboot975p = e(ciboot975p) 
-	mat list ciboot975p
 
-	mat cibootbd95ps = e(cibootbd95ps) 
-	mat list cibootbd95ps
-	mat cibootbd975ps = e(cibootbd975ps) 
-	mat list cibootbd975ps
-	
-	mat cibootbb95ps = e(cibootbb95ps) 
-	mat list cibootbb95ps
-	mat cibootbb975ps = e(cibootbb975ps) 
-	mat list cibootbb975ps
-	
-	mat cibootd95ps = e(cibootd95ps) 
-	mat list cibootd95ps
-	mat cibootd975ps = e(cibootd975ps) 
-	mat list cibootd975ps
-	
-	mat cibootb95ps = e(cibootb95ps) 
-	mat list cibootb95ps
-	mat cibootb975ps = e(cibootb975ps) 
-	mat list cibootb975ps
-	
-	mat theta0 = e(theta0)
-	mat list theta0
 end
 
 
@@ -96,21 +26,24 @@ mata clear
 mata set matastrict on
 
 //void myfun_combined(string scalar varlist, string scalar touse)
-void myfun_combined(string scalar varlist,string scalar touse, | string scalar dnum, ///
-					string scalar dfnum, string scalar cnum, string scalar ttau, ///
-					string matrix gridd)
+void bstrap(string scalar varlist,string scalar touse, string matrix ggstar, ///
+			string matrix beta1, string matrix delta1,string matrix beta2, ///
+			string matrix delta2)
 {
-	real matrix Z, X, Y, Xdnp, Xcnp, gridnp, gridid, grid
-	real scalar dv, N, quant, ymin, ymax, xdnum, t_xdnum, xcnum
+	real matrix Z, X, Y, beta_mse,delta_mse, beta_hom, delta_hom
+	real scalar dv, N, gstard,gstarbd,gstarbb,gstar
 	st_view(Z=.,.,tokens(varlist),touse)
 	
-	//quant = strtoreal(st_local("ttau"))
-	quant = 0.5
-	xdnum = strtoreal(st_local("dfnum"))
-	t_xdnum = strtoreal(st_local("dnum"))
-	xcnum = strtoreal(st_local("cnum"))
+	gstar = st_matrix(ggstar)
 	
-	grid = st_matrix(gridd)
+	gstard = gstar[1]
+	gstarbd = gstar[2]
+	gstarbb = gstar[3]
+	
+	beta_mse = st_matrix(beta1)
+	delta_mse = st_matrix(delta1)
+	beta_hom = st_matrix(beta2)
+	delta_hom = st_matrix(delta2)
 	
 	Y = Z[.,1]
 	X = Z[|1,2\.,.|]
@@ -119,19 +52,9 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	X = (J(N,1,1) , X)
 	dv = cols(X)
 	
-	ymin = min(Y)
-	ymax = max(Y)
-	
-	//gridid = ((grid[.,1] + grid[.,2]) :< 2)
-	//grid = select(grid,gridid)
-	grid = grid'
-	gridnp = grid[|1,1\xdnum+xcnum,.|]
-	
-	//rseed(13579)
-	
 	//--------------------------------------------------------------------------
 	//defining parameters
-	real scalar G, JJ, B, boots, mm, b0, d0, lower, upper, step, dd, dbb, i, j, b, gg, R
+	real scalar G, JJ, B, boots, mm, b0, d0, lower, upper, step, dd, dbb, i, j, b, gg, R, tau
 	real matrix l, ciboot1, phi, nb_mse, disd, disbd, disbb, disdbias, disbbbias, disbdbias
 				
 	G = 40
@@ -155,216 +78,10 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	dbb = sum(phi)
 	dd = dv - 1 - dbb
 	
-	nb_mse = J(G,1,0)
-	disd = J(G,1,0)
-	disbd = disd
-	disbb = disd
-	disdbias = J(G,1,0)
-	disbbbias = disdbias
-	disbdbias = disdbias
-	
-	pointer(pointer(real colvector)) colvector par_boot, par_bootb
-	pointer(real matrix) rowvector  V_homb, V_mse
-	//pointer(real matrix) rowvector  V_homd
-	par_boot = J(B,1,NULL)
-	par_bootb = J(B,1,NULL)
-	V_homb = J(1,G,NULL)
-	//V_homd = J(1,G,NULL)
-	V_mse = J(1,G,NULL)
-	
-	for(gg=1;gg<=G;gg++){
-		V_homb[gg] = &(0)
-		//V_homd[gg] = &(0)
-		V_mse[gg] = &(0)
-	}
-	
-	real matrix par_mse, par_hom, Nb_hom, chid, tempV
-	//real matrix  chibb
-	real scalar median_d1, median_d2, median_b1, tempdis, tempdis_b, tempnb
-	par_mse = J(2*(dv-1),G,0)
-	par_hom = J(dv-1,G,0)
-	Nb_hom = J(G,1,0)
-	chid = J(G,1,0)
-	//chibb = J(G,1,0)
-	nb_mse = J(G,1,0)
-	median_d1 = mm_median(rchi2(100000,1,(JJ-1)*(dv-1)))
-	median_d2 = mm_median(rchi2(100000,1,(JJ-1)*dd))
-	median_b1 = mm_median(rchi2(100000,1,JJ*dbb))
-	
-	real scalar nbtemp, tau, tempdis_d
-	real matrix tempmsef, tempVd, tempVb, tempmse
-	
-	timer_clear()
-	for(gg=1;gg<=G;gg++){
-		timer_on(1)
-		tempmsef = (0)
-		tempmse = (0)
-		tempV = (0)
-		tempVd = (0)
-		tempVb = (0)
-	
-		tau = lower + step * gg
-		myfun_hetero(tau,mm,b0,d0, X,Y,l,tempmsef,tempdis,tempV,tempnb)
-		par_mse[|1,gg\2*(dv-1),gg|] = tempmsef
-		chid[gg] = tempdis
-		V_mse[gg] = &tempV
-		nb_mse[gg] = tempnb
-		myfun_hom(tau,mm,phi,X,Y,l,tempmse,tempdis_d,tempdis_b,tempVd,tempVb,tempnb)
-		par_hom[|1,gg\(dv-1),gg|] = tempmse
-		Nb_hom[gg] = tempnb
-		//chibb[gg] = tempdis_b
-		//V_homd[gg] = &tempVd
-		V_homb[gg] = &tempVb
-		timer_off(1)
-		
-	}		
-	timer()
-	//--------------------------------------------------------------------------
-	//line 124
-	real matrix tempchi_bootd, tempchi_bootbd, tempchi_bootbb
-	tempchi_bootd = J(B,G,0)
-	tempchi_bootbd = J(B,G,0)
-	tempchi_bootbb = J(B,G,0)
-	
-	real matrix Zz, tempboot, tempZ, tempidz, recorder
-	string scalar fmt
-
-	for(b=1;b<=B;b++){
-		timer_on(2)
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		//seltempidz = tempidz[|1,1\boots,1|]
-		//Zz = Z[seltempidz,.]
-		tempZ = jumble(Z)
-		Zz = tempZ[|1,1\boots,.|]
-		X = Zz[|1,2\.,.|]
-		X = (J(boots,1,1), X)
-		Y = Zz[|1,1\.,1|]
-		par_boot[b] = &(J(G,1,NULL))
-		par_bootb[b] = &(J(G,1,NULL))
-		
-		tempmsef = (0)
-		tempmse = (0)
-		
-		for(gg=1;gg<=G;gg++){	
-			tau = lower + step * gg
-			myfun_hetero(tau,mm,b0,d0,X,Y,l,tempmsef,tempdis)
-			if (tempdis==.){
-				tempchi_bootd[b,gg] = 0
-				st_matrix("e(Zz1)",Zz)
-			}
-			else{
-				tempchi_bootd[b,gg] = tempdis
-			}			
-			(*par_boot[b])[gg] = &(tempmsef[|1,1\dv-1,1|])
-		    myfun_hom(tau,mm,phi,X,Y,l,tempmse,tempdis_d,tempdis_b)
-			(*par_bootb[b])[gg] = &(tempmse)
-			if (tempdis_d==.){
-				tempchi_bootbd[b,gg] = 0
-				st_matrix("e(Zz2)",Zz)
-			}
-			else{
-				tempchi_bootbd[b,gg] = tempdis_d
-			}
-			if (tempdis_b==.){
-				tempchi_bootbb[b,gg] = 0
-				st_matrix("e(Zz3)",Zz)
-			}
-			else{
-				tempchi_bootbb[b,gg] = tempdis_b
-			}
-			
-		}
-		timer_off(2)
-
-	}timer()
-	
-	disdbias[|1,1\.,1|] = abs(mm_median(tempchi_bootd) :- median_d1)'
-	disbdbias[|1,1\.,1|] = abs(mm_median(tempchi_bootbd) :- median_d2)'
-	disbbbias[|1,1\.,1|] = abs(mm_median(tempchi_bootbb) :- median_b1)'	
-	
-	//--------------------------------------------------------------------------
-	//line 153
-	real matrix disdvar, disbdvar, disbbvar
-	disdvar = J(G,1,0)
-	disbdvar = disdvar
-	disbbvar = disdvar
-	
-	real matrix tempboot1, tempboot2, tempbootd, tempbootb, temphom, ///
-				temphomd, temphomb, w, beta_mse, ///
-				delta_mse, delta_hom, beta_hom
-	real scalar gstard, gstarbd, gstarbb
-	w = (0,0)
-	tempboot1 = J(dv-1,B,0)
-	tempboot2 = J(dv-1,B,0)
-	for(gg=1;gg<=G;gg++){
-		timer_on(3)
-		for(b=1;b<=B;b++){
-			tempboot1[|1,b\.,b|] = *(*par_boot[b])[gg]
-			tempboot2[|1,b\.,b|] = *(*par_bootb[b])[gg]
-		}
-		
-		//tempmse = par_mse[|1,gg\dv-1,gg|]
-		tempbootd = tempboot2[|1,1\dd,.|]
-		tempbootb = tempboot2[|dd+1,1\.,.|]
-		temphom = par_hom[|1,gg\.,gg|]
-		//temphomd = temphom[|1,1\dd,.|]
-		//temphomb = temphom[|dd+1,1\.,.|]
-		
-		disdvar[gg] = mean(colsum((tempboot1 - J(1,B,mean(tempboot1')')):^2)')
-		disbdvar[gg] = mean(colsum((tempbootd - J(1,B,mean(tempbootd')')):^2)')
-		disbbvar[gg] = mean(colsum((tempbootb - J(1,B,mean(tempbootb')')):^2)')
-		
-		tau = lower + step * gg
-		
-		disd[gg] = disdvar[gg] * boots/N + disdbias[gg]/sqrt(tau*boots)
-		disbd[gg] = disbdvar[gg] * boots/N + disbdbias[gg]/sqrt(tau*boots)
-		disbb[gg] = disbbvar[gg] * boots/N + disbbbias[gg]/sqrt(tau*boots)
-		
-		//-----------------------------
-		//Optional,tested
-		/*
-		real matrix disdmse, disbdmse, disbbmse
-		disdmse = J(G,1,0)
-		disbdmse = disdmse
-		disbbmse = disdmse
-		disdmse[gg] = mean(colsum((tempboot1 - J(1,B,tempmse)):^2)')
-		disbdmse[gg] = mean(colsum((tempbootd - J(1,B,temphomd)):^2)')
-		disbbmse[gg] = mean(colsum((tempbootb - J(1,B,temphomb)):^2)')
-		
-		tau = lower + step * gg
-		disd[gg] = disdmse[gg] * boots/N + sqrt(disdbias[gg]/(tau*boots))
-		disbd[gg] = disbdmse[gg] * boots/N + sqrt(disbdbias[gg]/(tau*boots))
-		disbb[gg] = disbbmse[gg] * boots/N + sqrt(disbbbias[gg]/(tau*boots))
-		*/
-		//-----------------------------
-		timer_off(3)
-	}	timer()
-	
-	minindex(disd,1,gstard,w)
-	minindex(disbd,1,gstarbd,w)
-	minindex(disbb,1,gstarbb,w)
-	
-	delta_mse = par_mse[|1,gstard\dv-1,gstard|]
-	beta_mse = par_mse[|dv,gstard\2*(dv-1),gstard|]
-	delta_hom = par_hom[|1,gstarbd\dd,gstarbd|]
-	beta_hom = par_hom[|dd+1,gstarbb\dv-1,gstarbb|]
-	real matrix V_mse_star
-	real scalar nb_mse_star
-	V_mse_star = *V_mse[gstard]
-	nb_mse_star = nb_mse[gstard]
-	
-	st_matrix("e(delta_mse)",delta_mse)
-	st_matrix("e(beta_mse)",beta_mse)
-	st_matrix("e(V_mse_star)",V_mse_star)
-	st_numscalar("e(nb_mse_star)",nb_mse_star)
-	st_matrix("e(delta_hom)",delta_hom)
-	st_matrix("e(beta_hom)",beta_hom)
-	
 	//--------------------------------------------------------------------------
 	//bootstrap
 	real matrix temp_bootstraphomb, temp_bootstraphomd, par_bootstrap, ///
-				par_bootstraphomb, par_bootstraphomd
+				par_bootstraphomb, par_bootstraphomd, tempboot, Zz, tempidz
 	
 	par_bootstrap = J(2*(dv-1),B,0)
 	par_bootstraphomb = J(dv-dd-1,B,0)
@@ -398,22 +115,7 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		timer_off(4)		
 	}timer()
 	
-	//--------------------------------------------------------------------------
-	real matrix cibootd95t, cibootb95t, cibootdlogt, cibootd975t, cibootb975t, ///
-				cibootbb95t, cibootbb975t
-	timer_on(5)			
-	tau = lower + step * gstard		
-	cibootd95t = (delta_mse :- 1.96*sqrt(diagonal((*V_mse[gstard]))/(N*tau)), delta_mse :+ 1.96*sqrt(diagonal((*V_mse[gstard]))/(N*tau)))
-	cibootb95t = (beta_mse :- 1.96*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 1.96*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]))
-	cibootdlogt = (delta_mse :- 7*sqrt(log(N))*sqrt(diagonal((*V_mse[gstard])):/(N*tau)),delta_mse :+ 7*sqrt(log(N))*sqrt(diagonal((*V_mse[gstard])):/(N*tau)))
-	
-	cibootbb95t = (beta_hom :- 1.96*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 1.96*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
-	
-	cibootd975t = (delta_mse :- 2.24*sqrt(diagonal((*V_mse[gstard])):/(N*tau)),delta_mse :+ 2.24*sqrt(diagonal((*V_mse[gstard])):/(N*tau)))
-	cibootb975t = (beta_mse :- 2.24*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 2.24*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]))
-	
-	cibootbb975t = (beta_hom :- 2.24*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 2.24*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
-	
+
 	//--------------------------------------------------------------------------
 	// bootstrap CI
 	real matrix ciboot95p, ciboot975p,cibootbd95p,cibootbd975p, cibootbb95p, cibootbb975p
@@ -453,13 +155,7 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	cibootbb95ps = (beta_hom - 1.96*std_hombboot,beta_hom + 1.96*std_hombboot)
 	cibootbb975ps = (beta_hom - 2.24*std_hombboot,beta_hom + 2.24*std_hombboot)
 	timer_off(5)
-	st_matrix("e(cibootd95t)",cibootd95t)
-	st_matrix("e(cibootd975t)",cibootd975t)
-	st_matrix("e(cibootb95t)",cibootb95t)
-	st_matrix("e(cibootb975t)",cibootb975t)
-	st_matrix("e(cibootbb95t)",cibootbb95t)
-	st_matrix("e(cibootbb975t)",cibootbb975t)
-	st_matrix("e(cibootdlogt)",cibootdlogt)
+
 	
 	st_matrix("e(ciboot95p)",ciboot95p)
 	st_matrix("e(ciboot975p)",ciboot975p)
@@ -504,130 +200,7 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	st_matrix("e(ci_med975)",ci_med975)
 	
 	
-	//--------------------------------------------------------------------------
-	//CLR bound for qth-QTE of the heteroskedastic variables
-	
-	real scalar M, r, rn, knv, knv2, temptheta1, temptheta2
-	real matrix nor, y1s, y2s, row, y1, y2, Xgrid, Zu_ss, Zl_ss, thetau, thetal, ///
-				Su, Sl, ll, theta0, e1, phiid, temp, ///
-				temps, val1, val2, val3, val4, tempzss, row2, Zu_ss2, Zussmax, ///
-				Zuss2max, row2id, Zlssmax, var1, var2, Zl_ss2, Zlss2max
-	if(dbb<dv-1){
-		
-		M = cols(grid)
-		nor = rnormal(dv-1,R,0,1)
-		
-		y1s = (0)
-		y2s = (0)
-		//quant is an input
-		
-		Y = Z[.,1]
-		Xdnp = Z[|1,2\.,1+xdnum|]
-		Xcnp = Z[|1,2+t_xdnum\.,1+t_xdnum+xcnum|]
-		clr_bound(Y,Xdnp,Xcnp,quant,gridnp,y1s,y2s,ymin,ymax)
-		
-		real matrix rowid
-		row = (y1s:!=-1000):*(y2s:!=1000):*(y1s:!=100):*(1..M)'
-		rowid = (row:!=0)
-		row = select(row,rowid)
-		y1 = y1s[row]
-		y2 = y2s[row]
-		Xgrid = grid
-		Xgrid = Xgrid[.,row]
-		
-		M = rows(row)
-		Zu_ss = J(M,R,0)
-		Zl_ss = J(M,R,0)
-		thetau = J(M,1,0)
-		thetal = J(M,1,0)
-		Su = J(M,1,0)
-		Sl = J(M,1,0)
-		phiid = (phi :== 0) 
-		ll = selectindex(phiid)
-		theta0 = J(dd,2,0)
-		
-		real scalar tempscal
-		for(j=1;j<=dd;j++){
-			timer_on(7)
-			e1 = J(dv-1,1,0)
-			tempscal = ll[j]
-			e1[tempscal] = 1
-			
-			for(mm=1;mm<=M;mm++){
 
-				val1 = Xgrid[.,mm]'*delta_mse
-				val2 = Xgrid[.,mm]'*beta_mse
-				val3 = e1'*delta_mse
-				
-				if(val3>0 & 1+val1>0.05){ 
-					temptheta1 = e1' * (beta_mse + delta_mse * (y2[mm] - val2 - b0)/(1 + val1))
-					temptheta2 = -e1' * (beta_mse + delta_mse * (y1[mm] - val2 - b0)/(1 + val1))
-				}
-				else if(val3<0 & 1+val1>0.05){
-					temptheta1 = e1' * ( beta_mse  + delta_mse *(y1[mm] - val2 - b0)/(1 + val1))
-					temptheta2 = -e1' * (beta_mse + delta_mse * (y2[mm] - val2 - b0)/(1 + val1))
-				}
-				else{
-					temptheta1 = 1000
-					temptheta2 = 1000
-				}
-				
-				
-				temp = sign(val3) * (e1 - val3 * Xgrid[.,mm]/abs(1 + val1))
-				//real matrix lrec,squareroot
-				//lrec = cholesky(V_mse_star)
-				//squareroot = lrec * 2 - diag(lrec)
-				val4 = temp'*matpowersym(V_mse_star,0.5)
-				temps = sqrt(sum(val4:^2))/abs(nb_mse_star)
-				
-				for(r=1;r<=R;r++){
-					tempzss = val4 * nor[.,r]/sqrt(sum(val4:^2))
-					Zu_ss[mm,r] = tempzss
-					Zl_ss[mm,r] = -tempzss
-				}
-				thetau[mm,1] = temptheta1
-				Su[mm,1] = temps
-				thetal[mm,1] = temptheta2
-				Sl[mm,1] = temps
-			}
-			rn = 1 - 0.1/log(N)
-			Zussmax = colmax(Zu_ss)
-			knv = mm_quantile(Zussmax',1,rn)
-			
-			row2 = (thetau < (min(thetau + knv*Su) :+2*knv*Su))
-			row2 = row2 :* (1 .. rows(row2))'
-			row2id = (row2:!=0)
-			row2 = select(row2,row2id)
-			Zu_ss2 = Zu_ss[row2,.]
-			Zuss2max = colmax(Zu_ss2)
-			knv2 = mm_quantile(Zuss2max',1,0.975)			
-			theta0[j,2] = min(thetau + knv2*Su)
-			
-			Zlssmax = colmax(Zl_ss)
-			knv = mm_quantile(Zlssmax',1,rn)
-			
-			row2 = (thetal < min(thetal + knv*Sl):+2*knv*Sl)
-			row2 = row2 :* (1 .. rows(row2))'
-			row2id = (row2:!=0)
-			row2 = select(row2,row2id)
-			Zl_ss2 = Zl_ss[row2,.]
-			Zlss2max = colmax(Zl_ss2)
-			knv2 = mm_quantile(Zlss2max',1,0.975)
-			theta0[j,1] = -min(thetal + knv2*Sl)
-			timer_off(7)
-		}
-		
-		real scalar qstard, qstarbd, qstarbb
-		
-		qstard = lower + step * gstard
-		qstarbd = lower + step * gstarbd
-		qstarbb = lower + step * gstarbb
-		
-		st_numscalar("e(gstard)",gstard)
-		st_numscalar("e(gstarbd)",gstarbd)
-		st_numscalar("e(gstarbb)",gstarbb)
-		st_matrix("e(theta0)",theta0)
-	}
 	timer()
 	
 }
@@ -1014,53 +587,10 @@ real matrix bound(x,dx)
 	return (b)
 }
 
-//------------------------------------------------------------------------------
-//bound.m
-void clr_bound(Y,Xdnp,Xcnp,tau,gridnp,y1,y2,yl,yr)
-{
-	real matrix D,tempx
-	real scalar hh, nn, ll, dd, i, mm, quant
-	D = (Y:>0)
-	nn = rows(Y)
-	ll = cols(Y)
-	mm = cols(gridnp)
-	dd = cols(Xdnp)
-	hh = 1.06 * nn^(-1/(4 + cols(Xcnp)))
-	y1 = J(mm,1,0)
-	y2 = J(mm,1,0)
-	//quant = mm_quantile(Y,1,tau)
-	
-	
-	real matrix val,val1,val2,val3, xc, xd, Xc, Xd
-	real scalar P1, temp1,temp2, rc
-	for(i=1;i<=mm;i++){
-		tempx = gridnp[|1,i\.,i|]
-		val1 = (rowsum(Xdnp:==J(nn,1,tempx[1..dd]')):==dd)
-		val2 = normalden(J(nn,1,tempx[|dd+1,1\.,1|]'):-Xcnp):/J(nn,1,sqrt(mm_colvar(Xcnp)))
-		val2 = exp(rowsum(log(val2)))
-		val3 = val1:*val2
-		P1 = sum((D:==1):*val3)/sum(val3)
-		val = (D:==1):*val3
-			
-		if((tau - 1 + P1)/P1>0){
-			rc = mm_root(temp1=.,&fun1(),yl,yr,1e-5,1000,Y,val,P1,tau)
-		}
-		else{
-			temp1 = -1000
-		}
-		if(tau/P1<1){
-			rc = mm_root(temp2=.,&fun2(),yl,yr,1e-5,1000,Y,val,P1,tau)	
-		}
-		else{
-			temp2 = 1000
-		}
-		y1[i,1] = temp1
-		y2[i,1] = temp2
-	}
-}
 
-function fun1(y,Y,val,P1,tau) return(sum((Y:<y):*val)/sum(val) - (tau-1+P1)/P1)
-function fun2(y,Y,val,P1,tau) return(sum((Y:<y):*val)/sum(val) - tau/P1)
 end
 
+mata: mata mosave myfun_hetero(),dir(PERSONAL) replace
+mata: mata mosave myfun_hom(),dir(PERSONAL) replace
+mata: mata mosave rq_fnm(),dir(PERSONAL) replace
 

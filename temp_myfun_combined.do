@@ -3,88 +3,19 @@
 
 //------------------------------------------------------------------------------
 //Stata program: creates a new command
-capture program drop myfun_combined
-program myfun_combined,eclass
+capture program drop temp_myfun_combined
+program temp_myfun_combined,eclass
 	version 13
-	syntax varlist(min=2 numeric) ,  Dnum(real) DFnum(real) CFnum(real) GRIDd(string) [Tau(real 0.5)]
+	syntax varlist(min=2 numeric) [if] [in] ,INDEPnum(real) Dnum(real) DFnum(real) Cnum(real) GRIDd(string)
 	marksample touse
 	tokenize `varlist'
 	
-	mata:myfun_combined("`varlist'","`touse'","`dnum'","`dfnum'","`cfnum'","`tau'","`gridd'")
+	scalar quant = 0.5
+	mata:myfun_combined("`varlist'","`touse'","`indep'","`dnum'","`dfnum'","`cnum'","quant","`gridd'")
 	
-	ereturn list
-	
-	mat delta_mse = e(delta_mse)
-	mat list delta_mse
-	mat beta_mse = e(beta_mse)
-	mat list beta_mse
-	mat delta_hom = e(delta_hom)
-	mat list delta_hom
-	mat beta_hom = e(beta_hom)
-	mat list beta_hom
-	mat V_mse_star = e(V_mse_star)
-	mat list V_mse_star
-	
-	mat cibootd95t = e(cibootd95t) 
-	mat list cibootd95t
-	mat cibootd975t = e(cibootd975t) 
-	mat list cibootd975t
-	
-	mat cibootb95t = e(cibootb95t) 
-	mat list cibootb95t
-	mat cibootb975t = e(cibootb975t) 
-	mat list cibootb975t
-	
-	mat cibootbb95t = e(cibootbb95t) 
-	mat list cibootbb95t
-	mat cibootbb975t = e(cibootbb975t) 
-	mat list cibootbb975t
-	
-	mat cibootdlogt = e(cibootdlogt) 
-	mat list cibootdlogt
-	
-	mat cibootd95t = e(cibootd95t) 
-	mat list cibootd95t
-	mat cibootd975t = e(cibootd975t) 
-	mat list cibootd975t
-	
-	mat cibootbd95p = e(cibootbd95p) 
-	mat list cibootbd95p
-	mat cibootbd975p = e(cibootbd975p) 
-	mat list cibootbd975p
-	
-	mat cibootbb95p = e(cibootbb95p) 
-	mat list cibootbb95p
-	mat cibootbb975p = e(cibootbb975p) 
-	mat list cibootbb975p
-	
-	mat ciboot95p = e(ciboot95p) 
-	mat list ciboot95p
-	mat ciboot975p = e(ciboot975p) 
-	mat list ciboot975p
 
-	mat cibootbd95ps = e(cibootbd95ps) 
-	mat list cibootbd95ps
-	mat cibootbd975ps = e(cibootbd975ps) 
-	mat list cibootbd975ps
-	
-	mat cibootbb95ps = e(cibootbb95ps) 
-	mat list cibootbb95ps
-	mat cibootbb975ps = e(cibootbb975ps) 
-	mat list cibootbb975ps
-	
-	mat cibootd95ps = e(cibootd95ps) 
-	mat list cibootd95ps
-	mat cibootd975ps = e(cibootd975ps) 
-	mat list cibootd975ps
-	
-	mat cibootb95ps = e(cibootb95ps) 
-	mat list cibootb95ps
-	mat cibootb975ps = e(cibootb975ps) 
-	mat list cibootb975ps
-	
-	mat theta0 = e(theta0)
-	mat list theta0
+	ereturn list
+
 end
 
 
@@ -96,20 +27,19 @@ mata clear
 mata set matastrict on
 
 //void myfun_combined(string scalar varlist, string scalar touse)
-void myfun_combined(string scalar varlist,string scalar touse, | string scalar dnum, ///
-					string scalar dfnum, string scalar cnum, string scalar ttau, ///
-					string matrix gridd)
+void myfun_combined(string scalar varlist,string scalar touse, |string scalar indep, ///
+					string scalar dnum, string scalar dfnum, string scalar cnum, ///
+					string scalar qquant, string matrix gridd)
 {
 	real matrix Z, X, Y, Xdnp, Xcnp, gridnp, gridid, grid
-	real scalar dv, N, quant, ymin, ymax, xdnum, t_xdnum, xcnum
+	real scalar dv, N, xdnum, t_xdnum, xcnum, indepnum, quant
 	st_view(Z=.,.,tokens(varlist),touse)
 	
-	//quant = strtoreal(st_local("ttau"))
-	quant = 0.5
+	indepnum = strtoreal(st_local("indep"))
 	xdnum = strtoreal(st_local("dfnum"))
 	t_xdnum = strtoreal(st_local("dnum"))
 	xcnum = strtoreal(st_local("cnum"))
-	
+	quant = st_numscalar(qquant)
 	grid = st_matrix(gridd)
 	
 	Y = Z[.,1]
@@ -119,26 +49,22 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	X = (J(N,1,1) , X)
 	dv = cols(X)
 	
-	ymin = min(Y)
-	ymax = max(Y)
-	
-	//gridid = ((grid[.,1] + grid[.,2]) :< 2)
-	//grid = select(grid,gridid)
+	gridid = ((grid[.,1] + grid[.,2]) :< 2)
+	grid = select(grid,gridid)
 	grid = grid'
 	gridnp = grid[|1,1\xdnum+xcnum,.|]
 	
-	//rseed(13579)
 	
 	//--------------------------------------------------------------------------
 	//defining parameters
 	real scalar G, JJ, B, boots, mm, b0, d0, lower, upper, step, dd, dbb, i, j, b, gg, R
 	real matrix l, ciboot1, phi, nb_mse, disd, disbd, disbb, disdbias, disbbbias, disbdbias
 				
-	G = 40
+	G = 50
 	l = (0.65,0.85,1.15,1.45)
 	JJ = cols(l)
-	B = 500
-	boots = 550
+	B = 50
+	boots = 500
 	R = 200
 	mm = 1.2
 	b0 = 0
@@ -164,61 +90,57 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	disbdbias = disdbias
 	
 	pointer(pointer(real colvector)) colvector par_boot, par_bootb
-	pointer(real matrix) rowvector  V_homb, V_mse
-	//pointer(real matrix) rowvector  V_homd
+	pointer(real matrix) rowvector V_homb, V_homd, V_mse
 	par_boot = J(B,1,NULL)
 	par_bootb = J(B,1,NULL)
 	V_homb = J(1,G,NULL)
-	//V_homd = J(1,G,NULL)
+	V_homd = J(1,G,NULL)
 	V_mse = J(1,G,NULL)
 	
 	for(gg=1;gg<=G;gg++){
 		V_homb[gg] = &(0)
-		//V_homd[gg] = &(0)
+		V_homd[gg] = &(0)
 		V_mse[gg] = &(0)
 	}
 	
-	real matrix par_mse, par_hom, Nb_hom, chid, tempV
-	//real matrix  chibb
+	real matrix par_mse, par_hom, Nb_hom, chid, chibb, tempV
 	real scalar median_d1, median_d2, median_b1, tempdis, tempdis_b, tempnb
 	par_mse = J(2*(dv-1),G,0)
 	par_hom = J(dv-1,G,0)
 	Nb_hom = J(G,1,0)
 	chid = J(G,1,0)
-	//chibb = J(G,1,0)
+	chibb = J(G,1,0)
 	nb_mse = J(G,1,0)
 	median_d1 = mm_median(rchi2(100000,1,(JJ-1)*(dv-1)))
 	median_d2 = mm_median(rchi2(100000,1,(JJ-1)*dd))
 	median_b1 = mm_median(rchi2(100000,1,JJ*dbb))
 	
 	real scalar nbtemp, tau, tempdis_d
-	real matrix tempmsef, tempVd, tempVb, tempmse
+	real matrix tempmse, tempVd, tempVb
+	tempmse = (0)
+	tempV = (0)
+	tempVd = (0)
+	tempVb = (0)
 	
-	timer_clear()
 	for(gg=1;gg<=G;gg++){
-		timer_on(1)
-		tempmsef = (0)
-		tempmse = (0)
-		tempV = (0)
-		tempVd = (0)
-		tempVb = (0)
-	
 		tau = lower + step * gg
-		myfun_hetero(tau,mm,b0,d0, X,Y,l,tempmsef,tempdis,tempV,tempnb)
-		par_mse[|1,gg\2*(dv-1),gg|] = tempmsef
+		myfun_hetero(tau,mm,b0,d0, X,Y,l,tempmse,tempdis,tempV,tempnb)
+		par_mse[|1,gg\2*(dv-1),gg|] = tempmse
 		chid[gg] = tempdis
 		V_mse[gg] = &tempV
 		nb_mse[gg] = tempnb
 		myfun_hom(tau,mm,phi,X,Y,l,tempmse,tempdis_d,tempdis_b,tempVd,tempVb,tempnb)
 		par_hom[|1,gg\(dv-1),gg|] = tempmse
 		Nb_hom[gg] = tempnb
-		//chibb[gg] = tempdis_b
-		//V_homd[gg] = &tempVd
+		chibb[gg] = tempdis_b
+		V_homd[gg] = &tempVd
 		V_homb[gg] = &tempVb
-		timer_off(1)
-		
-	}		
-	timer()
+	}
+			
+			st_matrix("e(nb_mse)",nb_mse)
+			st_matrix("e(par_mse)",par_mse)
+			st_matrix("e(par_hom)",par_hom)
+			st_matrix("e(chid)",chid)
 	//--------------------------------------------------------------------------
 	//line 124
 	real matrix tempchi_bootd, tempchi_bootbd, tempchi_bootbb
@@ -226,58 +148,30 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	tempchi_bootbd = J(B,G,0)
 	tempchi_bootbb = J(B,G,0)
 	
-	real matrix Zz, tempboot, tempZ, tempidz, recorder
-	string scalar fmt
+	real matrix Zz, idz, tempidz, seltempidz, tempboot
 
 	for(b=1;b<=B;b++){
-		timer_on(2)
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		//seltempidz = tempidz[|1,1\boots,1|]
-		//Zz = Z[seltempidz,.]
-		tempZ = jumble(Z)
-		Zz = tempZ[|1,1\boots,.|]
+		idz = 1::N
+		tempidz = jumble(idz)
+		seltempidz = tempidz[|1,1\boots,1|]
+		Zz = Z[seltempidz,.]
 		X = Zz[|1,2\.,.|]
 		X = (J(boots,1,1), X)
 		Y = Zz[|1,1\.,1|]
 		par_boot[b] = &(J(G,1,NULL))
 		par_bootb[b] = &(J(G,1,NULL))
-		
-		tempmsef = (0)
-		tempmse = (0)
-		
 		for(gg=1;gg<=G;gg++){	
 			tau = lower + step * gg
-			myfun_hetero(tau,mm,b0,d0,X,Y,l,tempmsef,tempdis)
-			if (tempdis==.){
-				tempchi_bootd[b,gg] = 0
-				st_matrix("e(Zz1)",Zz)
-			}
-			else{
-				tempchi_bootd[b,gg] = tempdis
-			}			
-			(*par_boot[b])[gg] = &(tempmsef[|1,1\dv-1,1|])
+			myfun_hetero(tau,mm,b0,d0,X,Y,l,tempmse,tempdis)
+			tempchi_bootd[b,gg] = tempdis
+			(*par_boot[b])[gg] = &(tempmse)
 		    myfun_hom(tau,mm,phi,X,Y,l,tempmse,tempdis_d,tempdis_b)
 			(*par_bootb[b])[gg] = &(tempmse)
-			if (tempdis_d==.){
-				tempchi_bootbd[b,gg] = 0
-				st_matrix("e(Zz2)",Zz)
-			}
-			else{
-				tempchi_bootbd[b,gg] = tempdis_d
-			}
-			if (tempdis_b==.){
-				tempchi_bootbb[b,gg] = 0
-				st_matrix("e(Zz3)",Zz)
-			}
-			else{
-				tempchi_bootbb[b,gg] = tempdis_b
-			}
-			
+			tempchi_bootbd[b,gg] = tempdis_d
+			tempchi_bootbb[b,gg] = tempdis_b
 		}
-		timer_off(2)
 
-	}timer()
+	}
 	
 	disdbias[|1,1\.,1|] = abs(mm_median(tempchi_bootd) :- median_d1)'
 	disbdbias[|1,1\.,1|] = abs(mm_median(tempchi_bootbd) :- median_d2)'
@@ -295,21 +189,22 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 				delta_mse, delta_hom, beta_hom
 	real scalar gstard, gstarbd, gstarbb
 	w = (0,0)
-	tempboot1 = J(dv-1,B,0)
-	tempboot2 = J(dv-1,B,0)
+	tempboot1 = J(dv-1,G,0)
+	tempboot2 = J(dv-1,G,0)
 	for(gg=1;gg<=G;gg++){
-		timer_on(3)
-		for(b=1;b<=B;b++){
-			tempboot1[|1,b\.,b|] = *(*par_boot[b])[gg]
-			tempboot2[|1,b\.,b|] = *(*par_bootb[b])[gg]
+			tempboot1 = *(*par_boot[1])[gg]
+			tempboot2 = *(*par_bootb[1])[gg]
+		for(b=2;b<=B;b++){
+			tempboot1 = (tempboot1,*(*par_boot[b])[gg])
+			tempboot2 = (tempboot2,*(*par_bootb[b])[gg])
 		}
 		
-		//tempmse = par_mse[|1,gg\dv-1,gg|]
+		tempmse = par_mse[|1,gg\dv-1,gg|]
 		tempbootd = tempboot2[|1,1\dd,.|]
 		tempbootb = tempboot2[|dd+1,1\.,.|]
 		temphom = par_hom[|1,gg\.,gg|]
-		//temphomd = temphom[|1,1\dd,.|]
-		//temphomb = temphom[|dd+1,1\.,.|]
+		temphomd = temphom[|1,1\dd,.|]
+		temphomb = temphom[|dd+1,1\.,.|]
 		
 		disdvar[gg] = mean(colsum((tempboot1 - J(1,B,mean(tempboot1')')):^2)')
 		disbdvar[gg] = mean(colsum((tempbootd - J(1,B,mean(tempbootd')')):^2)')
@@ -338,26 +233,33 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		disbb[gg] = disbbmse[gg] * boots/N + sqrt(disbbbias[gg]/(tau*boots))
 		*/
 		//-----------------------------
-		timer_off(3)
-	}	timer()
+	}	
+	
 	
 	minindex(disd,1,gstard,w)
 	minindex(disbd,1,gstarbd,w)
 	minindex(disbb,1,gstarbb,w)
 	
+	st_numscalar("e(gstard)",gstard)
+	st_numscalar("e(gstarbd)",gstarbd)
+	st_numscalar("e(gstarbb)",gstarbb)
+	
 	delta_mse = par_mse[|1,gstard\dv-1,gstard|]
 	beta_mse = par_mse[|dv,gstard\2*(dv-1),gstard|]
 	delta_hom = par_hom[|1,gstarbd\dd,gstarbd|]
-	beta_hom = par_hom[|dd+1,gstarbb\dv-1,gstarbb|]
+	beta_hom = par_hom[|dd+1,gstarbd\dv-1,gstarbd|]
 	real matrix V_mse_star
 	real scalar nb_mse_star
 	V_mse_star = *V_mse[gstard]
 	nb_mse_star = nb_mse[gstard]
 	
 	st_matrix("e(delta_mse)",delta_mse)
+	st_matrix("e(disd)",disd)
+	st_matrix("e(disbd)",disbd)
+	st_matrix("e(disbb)",disbb)
+	st_matrix("e(delta_mse)",delta_mse)
 	st_matrix("e(beta_mse)",beta_mse)
 	st_matrix("e(V_mse_star)",V_mse_star)
-	st_numscalar("e(nb_mse_star)",nb_mse_star)
 	st_matrix("e(delta_hom)",delta_hom)
 	st_matrix("e(beta_hom)",beta_hom)
 	
@@ -374,10 +276,8 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	temp_bootstraphomd = (0)
 	
 	for(b=1;b<=B;b++){
-		timer_on(4)
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
+		idz = 1::N
+		tempidz = jumble(idz)
 		Zz = Z[tempidz,.]
 		X = Zz[|1,2\.,.|]
 	    X = (J(N,1,1) , X)
@@ -395,37 +295,37 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		par_bootstrap[|1,b\.,b|]= tempboot
 		par_bootstraphomb[|1,b\.,b|] = temp_bootstraphomb[|dd+1,1\dv-1,1|]
 		par_bootstraphomd[|1,b\.,b|] = temp_bootstraphomd[|1,1\dd,1|]
-		timer_off(4)		
-	}timer()
+				
+	}
 	
 	//--------------------------------------------------------------------------
 	real matrix cibootd95t, cibootb95t, cibootdlogt, cibootd975t, cibootb975t, ///
 				cibootbb95t, cibootbb975t
-	timer_on(5)			
+				
 	tau = lower + step * gstard		
-	cibootd95t = (delta_mse :- 1.96*sqrt(diagonal((*V_mse[gstard]))/(N*tau)), delta_mse :+ 1.96*sqrt(diagonal((*V_mse[gstard]))/(N*tau)))
-	cibootb95t = (beta_mse :- 1.96*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 1.96*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]))
-	cibootdlogt = (delta_mse :- 7*sqrt(log(N))*sqrt(diagonal((*V_mse[gstard])):/(N*tau)),delta_mse :+ 7*sqrt(log(N))*sqrt(diagonal((*V_mse[gstard])):/(N*tau)))
+	cibootd95t = (delta_mse :- 1.96*sqrt(diag((*V_mse[gstard])):/(N*tau)), delta_mse :+ 1.96*sqrt(diag((*V_mse[gstard])):/(N*tau))                        )
+	cibootb95t = (beta_mse :- 1.96*sqrt(diag((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 1.96*sqrt(diag((*V_mse[gstard])):/nb_mse[gstard]))
+	cibootdlogt = (delta_mse :- 7*sqrt(log(N))*sqrt(diag((*V_mse[gstard])):/(N*tau)),delta_mse :+ 7*sqrt(log(N))*sqrt(diag((*V_mse[gstard])):/(N*tau)))
 	
-	cibootbb95t = (beta_hom :- 1.96*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 1.96*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
+	cibootbb95t = (beta_hom :- 1.96*sqrt(diag((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 1.96*sqrt(diag((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
 	
-	cibootd975t = (delta_mse :- 2.24*sqrt(diagonal((*V_mse[gstard])):/(N*tau)),delta_mse :+ 2.24*sqrt(diagonal((*V_mse[gstard])):/(N*tau)))
-	cibootb975t = (beta_mse :- 2.24*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 2.24*sqrt(diagonal((*V_mse[gstard])):/nb_mse[gstard]))
+	cibootd975t = (delta_mse :- 2.24*sqrt(diag((*V_mse[gstard])):/(N*tau)),delta_mse :+ 2.24*sqrt(diag((*V_mse[gstard])):/(N*tau)))
+	cibootb975t = (beta_mse :- 2.24*sqrt(diag((*V_mse[gstard])):/nb_mse[gstard]),beta_mse :+ 2.24*sqrt(diag((*V_mse[gstard])):/nb_mse[gstard]))
 	
-	cibootbb975t = (beta_hom :- 2.24*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 2.24*sqrt(diagonal((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
+	cibootbb975t = (beta_hom :- 2.24*sqrt(diag((*V_homb[gstarbb]))):/Nb_hom[gstarbb],beta_hom :+ 2.24*sqrt(diag((*V_homb[gstarbb]))):/Nb_hom[gstarbb])
 	
 	//--------------------------------------------------------------------------
 	// bootstrap CI
 	real matrix ciboot95p, ciboot975p,cibootbd95p,cibootbd975p, cibootbb95p, cibootbb975p
 	
-	ciboot95p = (mm_quantile(par_bootstrap',1,0.025)',mm_quantile(par_bootstrap',1,0.975)')
-	ciboot975p = (mm_quantile(par_bootstrap',1,0.0125)',mm_quantile(par_bootstrap',1,0.9875)')
+	ciboot95p = (mm_quantile(par_bootstraphomd',1,0.025)',mm_quantile(par_bootstraphomd',1,0.975)')
+	ciboot975p = (mm_quantile(par_bootstraphomd',1,0.0125)',mm_quantile(par_bootstraphomd',1,0.9875)')
 	
 	cibootbd95p = (mm_quantile(par_bootstraphomd',1,0.025)',mm_quantile(par_bootstraphomd',1,0.975)')
 	cibootbd975p = (mm_quantile(par_bootstraphomd',1,0.0125)',mm_quantile(par_bootstraphomd',1,0.9875)')
 	
 	cibootbb95p = (mm_quantile(par_bootstraphomb',1,0.025)',mm_quantile(par_bootstraphomb',1,0.975)')
-	cibootbb975p = (mm_quantile(par_bootstraphomb',1,0.0125)',mm_quantile(par_bootstraphomb',1,0.9875)')	
+	cibootbb975p = (mm_quantile(par_bootstraphomb',1,0.0125)',mm_quantile(par_bootstraphomb',1,0.9875)')
 	
 	//--------------------------------------------------------------------------
 	// bootstrap std
@@ -452,59 +352,31 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 	
 	cibootbb95ps = (beta_hom - 1.96*std_hombboot,beta_hom + 1.96*std_hombboot)
 	cibootbb975ps = (beta_hom - 2.24*std_hombboot,beta_hom + 2.24*std_hombboot)
-	timer_off(5)
-	st_matrix("e(cibootd95t)",cibootd95t)
-	st_matrix("e(cibootd975t)",cibootd975t)
-	st_matrix("e(cibootb95t)",cibootb95t)
-	st_matrix("e(cibootb975t)",cibootb975t)
-	st_matrix("e(cibootbb95t)",cibootbb95t)
-	st_matrix("e(cibootbb975t)",cibootbb975t)
-	st_matrix("e(cibootdlogt)",cibootdlogt)
-	
-	st_matrix("e(ciboot95p)",ciboot95p)
-	st_matrix("e(ciboot975p)",ciboot975p)
-	st_matrix("e(cibootbd95p)",cibootbd95p)
-	st_matrix("e(cibootbd975p)",cibootbd975p)
-	st_matrix("e(cibootbb95p)",cibootbb95p)
-	st_matrix("e(cibootbb975p)",cibootbb975p)
-	
-	st_matrix("e(cibootd95ps)",cibootd95ps)
-	st_matrix("e(cibootd975ps)",cibootd975ps)
-	st_matrix("e(cibootb95ps)",cibootb95ps)
-	st_matrix("e(cibootb975ps)",cibootb975ps)
-	st_matrix("e(cibootbd95ps)",cibootbd95ps)
-	st_matrix("e(cibootbd975ps)",cibootbd975ps)
-	st_matrix("e(cibootbb95ps)",cibootbb95ps)
-	st_matrix("e(cibootbb975ps)",cibootbb975ps)
 	
 	//--------------------------------------------------------------------------
+	
+	
+	//what is specificationtest
 	
 	real matrix beta_median, beta_median_boot, ci_med95, ci_med975
 	
 	beta_median = rq_fnm(X,Y,0.5)
 	beta_median_boot = J(dv,500,0)
 	
+		
 	for(j=1;j<=500;j++){
-		timer_on(6)
-		//idz = 1::N
-		//tempidz = jumble(idz)
-		tempidz = rdiscrete(N,1,J(N,1,1/N))
+		idz = 1::N
+		tempidz = jumble(idz)
 		Zz = Z[tempidz,.]
 		X= Zz[|1,2\.,.|]
 		X = (J(N,1,1) , X)
 		Y = Zz[|1,1\.,1|]
 		beta_median_boot[.,j] = rq_fnm(X,Y,0.5)
-		timer_off(6)
 	}
 	
 	ci_med95 = (mm_quantile(beta_median_boot',1,0.025)',mm_quantile(beta_median_boot',1,0.975)')
 	ci_med975 = (mm_quantile(beta_median_boot',1,0.0125)',mm_quantile(beta_median_boot',1,0.9875)')
 	
-	st_matrix("e(ci_med95)",ci_med95)
-	st_matrix("e(ci_med975)",ci_med975)
-	
-	
-	//--------------------------------------------------------------------------
 	//CLR bound for qth-QTE of the heteroskedastic variables
 	
 	real scalar M, r, rn, knv, knv2, temptheta1, temptheta2
@@ -524,7 +396,7 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		Y = Z[.,1]
 		Xdnp = Z[|1,2\.,1+xdnum|]
 		Xcnp = Z[|1,2+t_xdnum\.,1+t_xdnum+xcnum|]
-		clr_bound(Y,Xdnp,Xcnp,quant,gridnp,y1s,y2s,ymin,ymax)
+		clr_bound(Y,Xdnp,Xcnp,quant,gridnp,y1s,y2s)
 		
 		real matrix rowid
 		row = (y1s:!=-1000):*(y2s:!=1000):*(y1s:!=100):*(1..M)'
@@ -548,36 +420,39 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		
 		real scalar tempscal
 		for(j=1;j<=dd;j++){
-			timer_on(7)
 			e1 = J(dv-1,1,0)
 			tempscal = ll[j]
 			e1[tempscal] = 1
 			
 			for(mm=1;mm<=M;mm++){
-
+			
 				val1 = Xgrid[.,mm]'*delta_mse
 				val2 = Xgrid[.,mm]'*beta_mse
-				val3 = e1'*delta_mse
 				
-				if(val3>0 & 1+val1>0.05){ 
+				if(e1'*delta_mse>0 & 1+val1>0.05){
+					 
 					temptheta1 = e1' * (beta_mse + delta_mse * (y2[mm] - val2 - b0)/(1 + val1))
+			
 					temptheta2 = -e1' * (beta_mse + delta_mse * (y1[mm] - val2 - b0)/(1 + val1))
+		
 				}
-				else if(val3<0 & 1+val1>0.05){
+				else if(e1'*delta_mse<0 & 1+val1>0.05){
 					temptheta1 = e1' * ( beta_mse  + delta_mse *(y1[mm] - val2 - b0)/(1 + val1))
+					
 					temptheta2 = -e1' * (beta_mse + delta_mse * (y2[mm] - val2 - b0)/(1 + val1))
+				
 				}
 				else{
 					temptheta1 = 1000
 					temptheta2 = 1000
 				}
 				
-				
-				temp = sign(val3) * (e1 - val3 * Xgrid[.,mm]/abs(1 + val1))
-				//real matrix lrec,squareroot
-				//lrec = cholesky(V_mse_star)
-				//squareroot = lrec * 2 - diag(lrec)
-				val4 = temp'*matpowersym(V_mse_star,0.5)
+				val3 = e1'*delta_mse
+				temp = sign(val3) * (e1 - val3 * Xgrid[.,mm])/abs(1 + val1) 
+				real matrix lrec,squareroot
+				lrec = cholesky(V_mse_star)
+				squareroot = lrec * 2 - diag(lrec)
+				val4 = temp'*squareroot
 				temps = sqrt(sum(val4:^2))/abs(nb_mse_star)
 				
 				for(r=1;r<=R;r++){
@@ -592,21 +467,39 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 			}
 			rn = 1 - 0.1/log(N)
 			Zussmax = colmax(Zu_ss)
+			
+			st_matrix("e(Xgrid)",Xgrid)
+			st_matrix("e(ll)",ll)
+			st_matrix("e(e1)",e1)
+			st_matrix("e(temp)",temp)
+			
+			st_matrix("e(temp)",temp)
+			st_matrix("e(temps)",temps)
+			st_matrix("e(val3)",val3)
+			st_matrix("e(val4)",val4)
+			st_matrix("e(Zu_ss)",Zu_ss)
+			st_matrix("e(Zussmax)",Zussmax)
+			
+			
+			
+			
 			knv = mm_quantile(Zussmax',1,rn)
 			
 			row2 = (thetau < (min(thetau + knv*Su) :+2*knv*Su))
+			
 			row2 = row2 :* (1 .. rows(row2))'
 			row2id = (row2:!=0)
 			row2 = select(row2,row2id)
 			Zu_ss2 = Zu_ss[row2,.]
 			Zuss2max = colmax(Zu_ss2)
-			knv2 = mm_quantile(Zuss2max',1,0.975)			
+			knv2 = mm_quantile(Zuss2max',1,0.975)
 			theta0[j,2] = min(thetau + knv2*Su)
 			
 			Zlssmax = colmax(Zl_ss)
 			knv = mm_quantile(Zlssmax',1,rn)
 			
 			row2 = (thetal < min(thetal + knv*Sl):+2*knv*Sl)
+			
 			row2 = row2 :* (1 .. rows(row2))'
 			row2id = (row2:!=0)
 			row2 = select(row2,row2id)
@@ -614,7 +507,6 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 			Zlss2max = colmax(Zl_ss2)
 			knv2 = mm_quantile(Zlss2max',1,0.975)
 			theta0[j,1] = -min(thetal + knv2*Sl)
-			timer_off(7)
 		}
 		
 		real scalar qstard, qstarbd, qstarbb
@@ -623,12 +515,7 @@ void myfun_combined(string scalar varlist,string scalar touse, | string scalar d
 		qstarbd = lower + step * gstarbd
 		qstarbb = lower + step * gstarbb
 		
-		st_numscalar("e(gstard)",gstard)
-		st_numscalar("e(gstarbd)",gstarbd)
-		st_numscalar("e(gstarbb)",gstarbb)
-		st_matrix("e(theta0)",theta0)
 	}
-	timer()
 	
 }
 
@@ -1016,10 +903,10 @@ real matrix bound(x,dx)
 
 //------------------------------------------------------------------------------
 //bound.m
-void clr_bound(Y,Xdnp,Xcnp,tau,gridnp,y1,y2,yl,yr)
+void clr_bound(Y,Xdnp,Xcnp,tau,gridnp,y1,y2)
 {
 	real matrix D,tempx
-	real scalar hh, nn, ll, dd, i, mm, quant
+	real scalar hh, nn, ll, dd, i, mm
 	D = (Y:>0)
 	nn = rows(Y)
 	ll = cols(Y)
@@ -1028,28 +915,56 @@ void clr_bound(Y,Xdnp,Xcnp,tau,gridnp,y1,y2,yl,yr)
 	hh = 1.06 * nn^(-1/(4 + cols(Xcnp)))
 	y1 = J(mm,1,0)
 	y2 = J(mm,1,0)
-	//quant = mm_quantile(Y,1,tau)
 	
-	
-	real matrix val,val1,val2,val3, xc, xd, Xc, Xd
+	real matrix val1,val2,val3, xc, xd, Xc, Xd
 	real scalar P1, temp1,temp2, rc
 	for(i=1;i<=mm;i++){
 		tempx = gridnp[|1,i\.,i|]
-		val1 = (rowsum(Xdnp:==J(nn,1,tempx[1..dd]')):==dd)
-		val2 = normalden(J(nn,1,tempx[|dd+1,1\.,1|]'):-Xcnp):/J(nn,1,sqrt(mm_colvar(Xcnp)))
+		val1 = (rowsum(Xdnp:==J(nn,1,tempx[1..dd]')):==3)
+		val2 = normal(J(nn,1,tempx[dd+1...]'):-Xcnp):/J(nn,1,sqrt(variance(Xcnp)))
 		val2 = exp(rowsum(log(val2)))
 		val3 = val1:*val2
 		P1 = sum((D:==1):*val3)/sum(val3)
-		val = (D:==1):*val3
-			
+		
 		if((tau - 1 + P1)/P1>0){
-			rc = mm_root(temp1=.,&fun1(),yl,yr,1e-5,1000,Y,val,P1,tau)
+			xc = tempx[dd+1...]'
+			xd = tempx[1..dd]'
+			Xc = Xcnp
+			Xd = Xdnp
+
+			real scalar Xdrow, Xdcol
+			real matrix xdtemp, xctemp, val
+			Xdrow = rows(Xd)
+			Xdcol = cols(Xd)
+			xdtemp = J(Xdrow,1,xd)
+			xctemp = J(Xdrow,1,xc)
+			val1 = (rowsum(Xd:==xdtemp):==3)
+			val2 = exp(rowsum(log(normal(xctemp:-Xc/hh))))
+			val3 = (D:==1)
+			val = val3:*val1:*val2
+			val = val/sum(val)
+			rc = mm_root(temp1=.,&condQ1(),0,9,mm_quantile(Y,1,tau),1000,Y,val,P1,tau)
+
 		}
 		else{
 			temp1 = -1000
 		}
 		if(tau/P1<1){
-			rc = mm_root(temp2=.,&fun2(),yl,yr,1e-5,1000,Y,val,P1,tau)	
+			xc = tempx[dd+1...]'
+			xd = tempx[1..dd]'
+			Xc = Xcnp
+			Xd = Xdnp
+			Xdrow = rows(Xd)
+			Xdcol = cols(Xd)
+			xdtemp = J(Xdrow,1,xd)
+			xctemp = J(Xdrow,1,xc)
+			val1 = (rowsum(Xd:==xdtemp):==3)
+			val2 = exp(rowsum(log(normal(xctemp:-Xc/hh))))
+			val3 = (D:==1)
+			val = val3:*val1:*val2
+			val = val/sum(val)
+			rc = mm_root(temp2=.,&condQ2(),0,9,mm_quantile(Y,1,tau),1000,Y,val,P1,tau)
+			
 		}
 		else{
 			temp2 = 1000
@@ -1058,9 +973,13 @@ void clr_bound(Y,Xdnp,Xcnp,tau,gridnp,y1,y2,yl,yr)
 		y2[i,1] = temp2
 	}
 }
+function condQ1(y,Y,val,P1,tau) return(sum((Y:<y):*val) - (tau-1+P1)/P1)
 
-function fun1(y,Y,val,P1,tau) return(sum((Y:<y):*val)/sum(val) - (tau-1+P1)/P1)
-function fun2(y,Y,val,P1,tau) return(sum((Y:<y):*val)/sum(val) - tau/P1)
+function condQ2(y,Y,val,P1,tau) return(sum((Y:<y):*val)-tau/P1)
 end
 
-
+mata: mata mosave myfun_combined(),dir(PERSONAL) replace
+mata: mata mosave myfun_hetero(),dir(PERSONAL) replace
+mata: mata mosave myfun_hom(),dir(PERSONAL) replace
+mata: mata mosave rq_fnm(),dir(PERSONAL) replace
+mata: mata mosave clr_bound(),dir(PERSONAL) replace
