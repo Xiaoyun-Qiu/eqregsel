@@ -4,7 +4,7 @@
 
 program eqreg,eclass 
 	version 12
-	syntax varlist(min=2 numeric) [, Grid(integer 20) BTP(integer 200) Boots(real 600) ]
+	syntax varlist(min=2 numeric) [if] [in]  [, Grid(integer 20) BTP(integer 200) Boots(real 0) ]
 	marksample touse
 	quietly count if `touse'
 	if `r(N)' == 0 error 2000
@@ -27,7 +27,7 @@ program eqreg,eclass
 	local lower = min(80/`boots',0.1)
 	local upper = 0.3
 	local step = (`upper' - `lower')/`G'
-	mat Phi = J(1,`d',0)
+	mat Phi = J(1,`d'-1,0)
 	mat Phi[1,1] = 1
 	
 	local phi Phi
@@ -38,6 +38,14 @@ program eqreg,eclass
 	mat chi_bootbb = J(`B',1,0)
 	scalar disbb = 100
 	
+	* SPECIFY BOOTS
+	if `boots'== 0{
+		if `N'<=500                       local boots = 0.6*`N'
+		else if (`N'>500)&(`N'<=1000)     local boots = 300 + 0.4*(`N'-500)
+		else if (`N'>1000)&(`N'<=2000) 	  local boots = 500 + 0.2*(`N'-1000)
+		else                              local boots = 700 + 0.1*(`N'-2000)
+		local boots = floor(`boots')
+	}
 	
 	* SELECT OPTIMAL TAU
 	forvalues gg = 1/`G'{
@@ -221,13 +229,14 @@ program eqreg,eclass
 	mata: stat("`Par_bootstraphomb'", `J', `dbb',`chibb')
 	mat std_b = e(std_b)
 	mat V = diag(std_b)*diag(std_b)
-	local specificationtest = e(specificationtest)
+	local specificationtest e(specificationtest)
 	local df_r = 99999999
 	
 	* RETURNS IN ECLASS
-	ereturn clear
+	
 	ereturn scalar tau0 = `tau0'
 	ereturn scalar specificationtest =`specificationtest'
+	ereturn scalar boots = `boots'
 	//ereturn scalar df_r = `df_r'
 	
 	
@@ -236,6 +245,7 @@ program eqreg,eclass
 	di in gr "Optimal quantile index = " %10.0g e(tau0)
 	//di in gr "Bootstrapped standard deviation = " %10.0g e(std_b)
 	di in gr "Specification test = " %10.0g e(specificationtest)
+	di in gr "The sample size used in bootstrapping = " %10.0g e(boots)
 	di ""
 	* Display the results in a table
 
@@ -244,7 +254,7 @@ program eqreg,eclass
 	local i=1
 	//mat colnames beta_hom = "`1'"
 	mat colnames beta_hom = "`depvar'"
-	mac shift
+	//mac shift
 	while "`1'" != "" {
 		scalar index =  Phi[1,`i']
 		if (index == 1){
@@ -268,7 +278,8 @@ program eqreg,eclass
 	ereturn matrix beta_hom = beta_hom
 	ereturn matrix std_b = std_b
 	ereturn matrix v = V
-		
+	
+	drop y
 	
 end
 
